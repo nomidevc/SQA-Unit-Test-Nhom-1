@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FiTrash2, FiShoppingCart, FiArrowLeft } from 'react-icons/fi'
+import { FiTrash2, FiShoppingCart, FiArrowLeft, FiCheck, FiSquare, FiCheckSquare } from 'react-icons/fi'
 import { cartApi } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 import toast from 'react-hot-toast'
@@ -13,6 +13,7 @@ export default function CartPage() {
   const { isAuthenticated } = useAuthStore()
   const [cart, setCart] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [selectedItems, setSelectedItems] = useState<number[]>([])
 
   useEffect(() => {
     console.log('Cart page - isAuthenticated:', isAuthenticated)
@@ -36,6 +37,10 @@ export default function CartPage() {
       
       if (response.success) {
         setCart(response.data)
+        // Mặc định chọn tất cả sản phẩm
+        if (response.data?.items) {
+          setSelectedItems(response.data.items.map((item: any) => item.itemId))
+        }
       } else {
         console.warn('Cart API returned success=false')
       }
@@ -45,6 +50,28 @@ export default function CartPage() {
       setLoading(false)
     }
   }
+
+  // Toggle chọn 1 sản phẩm
+  const toggleSelectItem = (itemId: number) => {
+    setSelectedItems(prev => 
+      prev.includes(itemId) 
+        ? prev.filter(id => id !== itemId)
+        : [...prev, itemId]
+    )
+  }
+
+  // Chọn/bỏ chọn tất cả
+  const toggleSelectAll = () => {
+    if (!cart?.items) return
+    if (selectedItems.length === cart.items.length) {
+      setSelectedItems([])
+    } else {
+      setSelectedItems(cart.items.map((item: any) => item.itemId))
+    }
+  }
+
+  // Kiểm tra đã chọn tất cả chưa
+  const isAllSelected = cart?.items && selectedItems.length === cart.items.length
 
   const handleUpdateQuantity = async (itemId: number, newQuantity: number) => {
     if (newQuantity < 1) return
@@ -61,20 +88,36 @@ export default function CartPage() {
   }
 
   const handleRemoveItem = async (itemId: number) => {
+    console.log('🗑️ Attempting to remove item:', itemId)
     if (!confirm('Bạn có chắc muốn xóa sản phẩm này?')) return
     
     try {
+      console.log('📤 Calling removeCartItem API...')
       const response = await cartApi.removeCartItem(itemId)
+      console.log('📥 Remove response:', response)
+      
       if (response.success) {
-        loadCart()
+        console.log('✅ Remove successful, reloading cart...')
+        await loadCart()
+        console.log('✅ Cart reloaded')
         toast.success('Đã xóa sản phẩm')
+      } else {
+        console.error('❌ Remove failed:', response.message)
+        toast.error(response.message || 'Không thể xóa sản phẩm')
       }
     } catch (error: any) {
+      console.error('❌ Error removing item:', error)
       toast.error(error.message || 'Lỗi khi xóa')
     }
   }
 
   const handleCheckout = () => {
+    if (selectedItems.length === 0) {
+      toast.error('Vui lòng chọn ít nhất 1 sản phẩm')
+      return
+    }
+    // Lưu danh sách item đã chọn vào sessionStorage
+    sessionStorage.setItem('selectedCartItems', JSON.stringify(selectedItems))
     router.push('/checkout')
   }
 
@@ -87,10 +130,14 @@ export default function CartPage() {
 
   const calculateTotal = () => {
     if (!cart?.items) return 0
-    return cart.items.reduce((sum: number, item: any) => 
-      sum + (item.price * item.quantity), 0
-    )
+    // Chỉ tính tổng các sản phẩm đã chọn
+    return cart.items
+      .filter((item: any) => selectedItems.includes(item.itemId))
+      .reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0)
   }
+
+  // Đếm số sản phẩm đã chọn
+  const selectedCount = selectedItems.length
 
   if (loading) {
     return (
@@ -133,15 +180,44 @@ export default function CartPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Cart Items */}
             <div className="lg:col-span-2 space-y-4">
+              {/* Select All */}
+              <div className="bg-white rounded-lg shadow-sm p-4 flex items-center">
+                <button
+                  onClick={toggleSelectAll}
+                  className="flex items-center text-gray-700 hover:text-blue-600"
+                >
+                  {isAllSelected ? (
+                    <FiCheckSquare size={24} className="text-blue-600 mr-3" />
+                  ) : (
+                    <FiSquare size={24} className="mr-3" />
+                  )}
+                  <span className="font-medium">
+                    Chọn tất cả ({cart.items.length} sản phẩm)
+                  </span>
+                </button>
+              </div>
+
               {cart.items.map((item: any) => (
-                <div key={item.id} className="bg-white rounded-lg shadow-sm p-6">
+                <div key={item.itemId} className="bg-white rounded-lg shadow-sm p-6">
                   <div className="flex items-center space-x-4">
+                    {/* Checkbox */}
+                    <button
+                      onClick={() => toggleSelectItem(item.itemId)}
+                      className="flex-shrink-0"
+                    >
+                      {selectedItems.includes(item.itemId) ? (
+                        <FiCheckSquare size={24} className="text-blue-600" />
+                      ) : (
+                        <FiSquare size={24} className="text-gray-400 hover:text-gray-600" />
+                      )}
+                    </button>
+
                     {/* Image */}
                     <div className="w-24 h-24 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden">
-                      {item.product?.images && item.product.images.length > 0 ? (
+                      {item.productImage ? (
                         <img 
-                          src={item.product.images[0].imageUrl} 
-                          alt={item.product.name}
+                          src={item.productImage} 
+                          alt={item.productName}
                           className="w-full h-full object-contain"
                         />
                       ) : (
@@ -154,11 +230,14 @@ export default function CartPage() {
                     {/* Info */}
                     <div className="flex-1">
                       <Link 
-                        href={`/products/${item.product?.id}`}
+                        href={`/products/${item.productId}`}
                         className="text-lg font-semibold text-gray-900 hover:text-blue-600"
                       >
-                        {item.product?.name || 'Sản phẩm'}
+                        {item.productName || 'Sản phẩm'}
                       </Link>
+                      {item.productSku && (
+                        <p className="text-sm text-gray-500">SKU: {item.productSku}</p>
+                      )}
                       <p className="text-red-600 font-bold mt-1">
                         {formatPrice(item.price)}
                       </p>
@@ -167,7 +246,7 @@ export default function CartPage() {
                     {/* Quantity */}
                     <div className="flex items-center space-x-2">
                       <button
-                        onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)}
+                        onClick={() => handleUpdateQuantity(item.itemId, item.quantity - 1)}
                         className="w-8 h-8 border border-gray-300 rounded hover:bg-gray-100"
                       >
                         -
@@ -175,11 +254,11 @@ export default function CartPage() {
                       <input
                         type="number"
                         value={item.quantity}
-                        onChange={(e) => handleUpdateQuantity(item.id, parseInt(e.target.value) || 1)}
+                        onChange={(e) => handleUpdateQuantity(item.itemId, parseInt(e.target.value) || 1)}
                         className="w-16 text-center border border-gray-300 rounded py-1"
                       />
                       <button
-                        onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
+                        onClick={() => handleUpdateQuantity(item.itemId, item.quantity + 1)}
                         className="w-8 h-8 border border-gray-300 rounded hover:bg-gray-100"
                       >
                         +
@@ -195,7 +274,7 @@ export default function CartPage() {
 
                     {/* Remove */}
                     <button
-                      onClick={() => handleRemoveItem(item.id)}
+                      onClick={() => handleRemoveItem(item.itemId)}
                       className="text-red-500 hover:text-red-700 p-2"
                     >
                       <FiTrash2 size={20} />
@@ -212,6 +291,10 @@ export default function CartPage() {
                 
                 <div className="space-y-3 mb-4">
                   <div className="flex justify-between text-gray-600">
+                    <span>Đã chọn</span>
+                    <span>{selectedCount} sản phẩm</span>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
                     <span>Tạm tính</span>
                     <span>{formatPrice(calculateTotal())}</span>
                   </div>
@@ -227,23 +310,24 @@ export default function CartPage() {
 
                 <button
                   onClick={handleCheckout}
-                  className="w-full bg-red-600 text-white py-3 rounded-lg hover:bg-red-700 transition-colors font-semibold"
+                  disabled={selectedCount === 0}
+                  className={`w-full py-3 rounded-lg transition-colors font-semibold ${
+                    selectedCount === 0 
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-red-600 text-white hover:bg-red-700'
+                  }`}
                 >
-                  Tiến hành thanh toán
+                  {selectedCount === 0 ? 'Chọn sản phẩm để thanh toán' : `Thanh toán (${selectedCount})`}
                 </button>
 
                 <div className="mt-4 space-y-2 text-sm text-gray-600">
                   <p className="flex items-center">
                     <span className="mr-2">✓</span>
-                    Miễn phí vận chuyển toàn quốc
+                    Miễn phí vận chuyển nội thành Hà Nội
                   </p>
                   <p className="flex items-center">
                     <span className="mr-2">✓</span>
                     Thanh toán khi nhận hàng
-                  </p>
-                  <p className="flex items-center">
-                    <span className="mr-2">✓</span>
-                    Đổi trả trong 7 ngày
                   </p>
                 </div>
               </div>

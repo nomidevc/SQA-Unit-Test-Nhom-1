@@ -22,13 +22,24 @@ export default function CheckoutPage() {
     province: '',
     district: '',
     ward: '',
+    wardName: '',
     address: '',
     note: '',
     paymentMethod: 'COD',
-    shippingFee: 30000 // Phí ship mặc định
+    shippingFee: 30000, // Phí ship mặc định
+    provinceId: null as number | null,
+    districtId: null as number | null
   })
   const [shippingMethod, setShippingMethod] = useState<'internal' | 'ghn'>('internal')
   const [calculatingShipping, setCalculatingShipping] = useState(false)
+  
+  // GHN address data
+  const [provinces, setProvinces] = useState<any[]>([])
+  const [districts, setDistricts] = useState<any[]>([])
+  const [wards, setWards] = useState<any[]>([])
+  const [loadingProvinces, setLoadingProvinces] = useState(false)
+  const [loadingDistricts, setLoadingDistricts] = useState(false)
+  const [loadingWards, setLoadingWards] = useState(false)
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -37,9 +48,29 @@ export default function CheckoutPage() {
       return
     }
     
+    loadProvinces()
     loadCustomerProfile()
     loadOrderData()
   }, [isAuthenticated])
+  
+  // Load districts when province changes
+  useEffect(() => {
+    if (form.provinceId) {
+      loadDistricts(form.provinceId)
+    } else {
+      setDistricts([])
+      setWards([])
+    }
+  }, [form.provinceId])
+  
+  // Load wards when district changes
+  useEffect(() => {
+    if (form.districtId) {
+      loadWards(form.districtId)
+    } else {
+      setWards([])
+    }
+  }, [form.districtId])
 
   // Calculate shipping fee when address changes
   useEffect(() => {
@@ -47,6 +78,119 @@ export default function CheckoutPage() {
       calculateShippingFee()
     }
   }, [form.province, form.district])
+
+  const loadProvinces = async () => {
+    console.log('🔄 Loading provinces from GHN...')
+    setLoadingProvinces(true)
+    try {
+      const response = await fetch('http://localhost:8080/api/shipping/provinces')
+      const data = await response.json()
+      
+      console.log('📦 Provinces response:', data)
+      
+      if (data.success && data.data && data.data.length > 0) {
+        console.log('✅ Loaded', data.data.length, 'provinces from GHN')
+        // Filter out test provinces
+        const filteredProvinces = data.data.filter((p: any) => {
+          const name = p.name.toLowerCase()
+          // Check for test keywords
+          if (name.includes('test') || name.includes('alert')) return false
+          // Check for numbered city variants (Hà Nội 02, Hồ Chí Minh 02, etc.)
+          if (/\s+\d+$/.test(name)) return false // Ends with space(s) and number(s)
+          return true
+        })
+        setProvinces(filteredProvinces)
+      } else {
+        // Fallback to local data
+        console.warn('⚠️ GHN API failed, using local data')
+        const localProvinces = vietnamProvinces.map(p => ({
+          id: parseInt(p.code),
+          name: p.name
+        }))
+        setProvinces(localProvinces)
+        toast('Đang sử dụng dữ liệu địa chỉ offline', { icon: 'ℹ️' })
+      }
+    } catch (error) {
+      console.error('❌ Error loading provinces:', error)
+      // Fallback to local data
+      const localProvinces = vietnamProvinces.map(p => ({
+        id: parseInt(p.code),
+        name: p.name
+      }))
+      setProvinces(localProvinces)
+      toast('Đang sử dụng dữ liệu địa chỉ offline', { icon: 'ℹ️' })
+    } finally {
+      setLoadingProvinces(false)
+    }
+  }
+  
+  const loadDistricts = async (provinceId: number) => {
+    console.log('🔄 Loading districts for province:', provinceId)
+    setLoadingDistricts(true)
+    try {
+      const response = await fetch(`http://localhost:8080/api/shipping/districts/${provinceId}`)
+      const data = await response.json()
+      
+      console.log('📦 Districts response:', data)
+      
+      if (data.success && data.data && data.data.length > 0) {
+        console.log('✅ Loaded', data.data.length, 'districts from GHN')
+        setDistricts(data.data)
+      } else {
+        // Fallback to local data
+        console.warn('⚠️ GHN API failed for districts, using local data')
+        const province = vietnamProvinces.find(p => parseInt(p.code) === provinceId || p.name === form.province)
+        if (province) {
+          const localDistricts = province.districts.map(d => ({
+            id: parseInt(d.code),
+            name: d.name
+          }))
+          setDistricts(localDistricts)
+        } else {
+          setDistricts([])
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error loading districts:', error)
+      // Fallback to local data
+      const province = vietnamProvinces.find(p => parseInt(p.code) === provinceId || p.name === form.province)
+      if (province) {
+        const localDistricts = province.districts.map(d => ({
+          id: parseInt(d.code),
+          name: d.name
+        }))
+        setDistricts(localDistricts)
+      } else {
+        setDistricts([])
+      }
+    } finally {
+      setLoadingDistricts(false)
+    }
+  }
+  
+  const loadWards = async (districtId: number) => {
+    console.log('🔄 Loading wards for district:', districtId)
+    setLoadingWards(true)
+    try {
+      const response = await fetch(`http://localhost:8080/api/shipping/wards/${districtId}`)
+      const data = await response.json()
+      
+      console.log('📦 Wards response:', data)
+      
+      if (data.success && data.data) {
+        console.log('✅ Loaded', data.data.length, 'wards')
+        setWards(data.data)
+      } else {
+        console.error('❌ Failed to load wards:', data.message)
+        toast.error('Không thể tải danh sách phường/xã')
+      }
+    } catch (error) {
+      console.error('❌ Error loading wards:', error)
+      toast.error('Không thể tải danh sách phường/xã')
+    } finally {
+      setLoadingWards(false)
+    }
+  }
 
   const loadCustomerProfile = async () => {
     console.log('🔍 Loading customer profile...')
@@ -117,25 +261,30 @@ export default function CheckoutPage() {
         const response = await cartApi.getCart()
         console.log('Cart response:', response)
         
+        // Lấy danh sách item đã chọn từ sessionStorage
+        const selectedItemsJson = sessionStorage.getItem('selectedCartItems')
+        const selectedItemIds: number[] = selectedItemsJson ? JSON.parse(selectedItemsJson) : []
+        console.log('Selected item IDs:', selectedItemIds)
+        
         if (response.success && response.data?.items) {
-          const mappedItems = response.data.items.map((item: any) => {
+          // Lọc chỉ lấy các item đã được chọn
+          let filteredItems = response.data.items
+          if (selectedItemIds.length > 0) {
+            filteredItems = response.data.items.filter((item: any) => 
+              selectedItemIds.includes(item.itemId)
+            )
+          }
+          
+          const mappedItems = filteredItems.map((item: any) => {
             console.log('Processing item:', item)
             
-            // Backend có thể trả về product ở nhiều cấu trúc khác nhau
-            const product = item.product || item
-            
-            // Kiểm tra xem có thông tin sản phẩm không
-            if (!product.id && !product.productId) {
-              console.error('Item missing product ID:', item)
-              return null
-            }
-            
             return {
-              productId: product.id || product.productId || item.productId,
-              productName: product.name || product.productName || item.productName || 'Sản phẩm',
-              price: item.price || product.price || 0,
+              itemId: item.itemId, // Giữ lại itemId để xóa sau khi đặt hàng
+              productId: item.productId,
+              productName: item.productName || 'Sản phẩm',
+              price: item.price || 0,
               quantity: item.quantity || 1,
-              imageUrl: (product.images && product.images.length > 0 ? product.images[0].imageUrl : '') || product.image || item.imageUrl || ''
+              imageUrl: item.productImage || ''
             }
           }).filter(Boolean) // Loại bỏ null items
           
@@ -146,9 +295,8 @@ export default function CheckoutPage() {
           
           if (mappedItems.length === 0) {
             console.warn('No items after mapping!')
-            toast.error('Giỏ hàng trống - Kiểm tra console để debug')
-            // Tạm thời comment để xem log
-            // router.push('/cart')
+            toast.error('Vui lòng chọn sản phẩm để thanh toán')
+            router.push('/cart')
           }
         } else {
           toast.error('Không thể tải giỏ hàng')
@@ -231,8 +379,8 @@ export default function CheckoutPage() {
     e.preventDefault()
     
     if (!form.customerName || !form.customerPhone || !form.customerEmail || 
-        !form.province || !form.district || !form.address) {
-      toast.error('Vui lòng điền đầy đủ thông tin')
+        !form.province || !form.district || !form.ward || !form.address) {
+      toast.error('Vui lòng điền đầy đủ thông tin (bao gồm phường/xã)')
       return
     }
 
@@ -243,14 +391,19 @@ export default function CheckoutPage() {
 
     setSubmitting(true)
     try {
+      // Lấy danh sách itemIds đã chọn
+      const selectedItemIds = items.map((item: any) => item.itemId).filter(Boolean)
+      
       const orderData = {
         province: form.province,
         district: form.district,
-        ward: form.ward || '', // Phường/xã không bắt buộc
+        ward: form.ward, // Ward code from GHN (required)
+        wardName: form.wardName, // Ward name for display
         address: form.address,
         note: form.note,
         shippingFee: form.shippingFee,
-        paymentMethod: form.paymentMethod // COD hoặc SEPAY
+        paymentMethod: form.paymentMethod, // COD hoặc SEPAY
+        selectedItemIds: selectedItemIds // Danh sách item đã chọn
       }
 
       console.log('Submitting order:', orderData)
@@ -272,17 +425,12 @@ export default function CheckoutPage() {
           return
         }
         
-        // Xóa quickBuyOrder nếu có
+        // Xóa quickBuyOrder và selectedCartItems nếu có
         sessionStorage.removeItem('quickBuyOrder')
+        sessionStorage.removeItem('selectedCartItems')
         
-        // Xóa giỏ hàng trên backend
-        try {
-          await cartApi.clearCart()
-          // Dispatch event để cập nhật cart count
-          window.dispatchEvent(new Event('cartUpdated'))
-        } catch (error) {
-          console.error('Error clearing cart:', error)
-        }
+        // Dispatch event để cập nhật cart count (backend đã xóa các item đã mua)
+        window.dispatchEvent(new Event('cartUpdated'))
         
         // Nếu chọn thanh toán online → Tạo payment
         if (form.paymentMethod === 'SEPAY') {
@@ -406,24 +554,46 @@ export default function CheckoutPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Tỉnh/Thành phố <span className="text-red-500">*</span>
                       </label>
                       <select
-                        value={form.province}
-                        onChange={(e) => setForm({...form, province: e.target.value, district: '', ward: ''})}
+                        value={form.provinceId || ''}
+                        onChange={(e) => {
+                          const provinceId = Number(e.target.value)
+                          const province = provinces.find(p => p.id === provinceId)
+                          console.log('Selected province:', province)
+                          setForm({
+                            ...form, 
+                            provinceId: provinceId,
+                            province: province?.name || '',
+                            districtId: null,
+                            district: '',
+                            ward: ''
+                          })
+                        }}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required
+                        disabled={loadingProvinces}
                       >
-                        <option value="">Chọn tỉnh/thành</option>
-                        {vietnamProvinces.map((province) => (
-                          <option key={province.code} value={province.name}>
+                        <option value="">
+                          {loadingProvinces ? 'Đang tải...' : 
+                           provinces.length === 0 ? 'Không có dữ liệu' : 
+                           'Chọn tỉnh/thành'}
+                        </option>
+                        {provinces.map((province) => (
+                          <option key={province.id} value={province.id}>
                             {province.name}
                           </option>
                         ))}
                       </select>
+                      {provinces.length === 0 && !loadingProvinces && (
+                        <p className="text-xs text-red-500 mt-1">
+                          Không thể tải danh sách tỉnh/thành. Vui lòng kiểm tra console.
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -431,16 +601,53 @@ export default function CheckoutPage() {
                         Quận/Huyện <span className="text-red-500">*</span>
                       </label>
                       <select
-                        value={form.district}
-                        onChange={(e) => setForm({...form, district: e.target.value, ward: ''})}
+                        value={form.districtId || ''}
+                        onChange={(e) => {
+                          const districtId = Number(e.target.value)
+                          const district = districts.find(d => d.id === districtId)
+                          setForm({
+                            ...form, 
+                            districtId: districtId,
+                            district: district?.name || '',
+                            ward: ''
+                          })
+                        }}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required
-                        disabled={!form.province}
+                        disabled={!form.provinceId || loadingDistricts}
                       >
                         <option value="">Chọn quận/huyện</option>
-                        {availableDistricts.map((district) => (
-                          <option key={district.code} value={district.name}>
+                        {districts.map((district) => (
+                          <option key={district.id} value={district.id}>
                             {district.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Phường/Xã <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={form.ward}
+                        onChange={(e) => {
+                          const wardCode = e.target.value
+                          const ward = wards.find(w => w.code === wardCode)
+                          setForm({
+                            ...form, 
+                            ward: wardCode,
+                            wardName: ward?.name || ''
+                          })
+                        }}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                        disabled={!form.districtId || loadingWards}
+                      >
+                        <option value="">Chọn phường/xã</option>
+                        {wards.map((ward) => (
+                          <option key={ward.code} value={ward.code}>
+                            {ward.name}
                           </option>
                         ))}
                       </select>

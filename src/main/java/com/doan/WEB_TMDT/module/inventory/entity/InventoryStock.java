@@ -33,13 +33,18 @@ public class InventoryStock {
     //  Tính tự động số lượng có thể bán
     @Transient
     public Long getSellable() {
-        long sellable = onHand - reserved - damaged;
+        long on = onHand != null ? onHand : 0L;
+        long res = reserved != null ? reserved : 0L;
+        long dam = damaged != null ? damaged : 0L;
+        long sellable = on - res - dam;
         return Math.max(sellable, 0L);
     }
 
     //  Tính tổng còn trong kho (không trừ reserved)
     @Transient
     public Long getAvailable() {
-        return onHand - reserved;
+        long on = onHand != null ? onHand : 0L;
+        long res = reserved != null ? reserved : 0L;
+        return on - res;
     }
 }

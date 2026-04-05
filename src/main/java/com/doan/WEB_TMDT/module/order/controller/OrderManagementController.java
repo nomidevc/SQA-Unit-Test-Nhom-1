@@ -43,9 +43,18 @@ public class OrderManagementController {
     }
 
     
-    @PutMapping("/{orderId}/shipping")
-    public ApiResponse markAsShipping(@PathVariable Long orderId) {
-        return orderService.markAsShipping(orderId);
+    // DEPRECATED: Không cho phép cập nhật từ CONFIRMED nữa
+    // Chỉ cho phép cập nhật từ READY_TO_SHIP → SHIPPING
+    // @PutMapping("/{orderId}/shipping")
+    // public ApiResponse markAsShipping(@PathVariable Long orderId) {
+    //     return orderService.markAsShipping(orderId);
+    // }
+
+    // Cho phép nhân viên bán hàng cập nhật từ READY_TO_SHIP sang SHIPPING
+    // CHỈ endpoint này được sử dụng để cập nhật sang SHIPPING
+    @PutMapping("/{orderId}/mark-shipping-from-ready")
+    public ApiResponse markShippingFromReady(@PathVariable Long orderId) {
+        return orderService.markShippingFromReady(orderId);
     }
 
     @PutMapping("/{orderId}/delivered")

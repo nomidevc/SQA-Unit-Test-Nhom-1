@@ -1,20 +1,14 @@
 package com.doan.WEB_TMDT.module.accounting.service;
 
 import com.doan.WEB_TMDT.common.dto.ApiResponse;
-import com.doan.WEB_TMDT.module.accounting.dto.FinancialReportRequest;
-import com.doan.WEB_TMDT.module.accounting.entity.FinancialTransaction;
+import com.doan.WEB_TMDT.module.accounting.dto.FinancialTransactionRequest;
+import org.springframework.data.domain.Pageable;
 
 public interface FinancialTransactionService {
-    ApiResponse getAllTransactions(int page, int size);
-    ApiResponse getTransactionsByDateRange(FinancialReportRequest request);
-    ApiResponse createTransaction(FinancialTransaction transaction);
-    ApiResponse updateTransaction(Long id, FinancialTransaction transaction);
+    ApiResponse getAllTransactions(Pageable pageable);
+    ApiResponse getTransactionById(Long id);
+    ApiResponse createTransaction(FinancialTransactionRequest request, String createdBy);
+    ApiResponse updateTransaction(Long id, FinancialTransactionRequest request);
     ApiResponse deleteTransaction(Long id);
-    ApiResponse getProfitLossReport(FinancialReportRequest request);
-    ApiResponse getCashFlowReport(FinancialReportRequest request);
-    ApiResponse getExpenseAnalysis(FinancialReportRequest request);
-    
-    // Tự động tạo transaction từ order
-    void createTransactionFromOrder(String orderId);
-    void createRefundTransaction(String orderId, String refundAmount);
+    ApiResponse searchTransactions(String startDate, String endDate);
 }

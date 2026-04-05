@@ -55,36 +55,31 @@ const LoginPage = () => {
             phone: response.data.phone,
             address: response.data.address,
             role: response.data.role, // Giữ nguyên role gốc
-            position: response.data.position, // Thêm position
+            position: response.data.position, // Thêm position ở level user
             status: response.data.status,
+            employeeId: response.data.employeeId, // Lưu employeeId ở level user
+            // Thêm employee object nếu là EMPLOYEE
+            employee: response.data.role === 'EMPLOYEE' ? {
+              id: response.data.employeeId, // QUAN TRỌNG: Lưu employeeId vào employee.id
+              fullName: response.data.fullName,
+              phone: response.data.phone,
+              address: response.data.address,
+              position: response.data.position,
+              firstLogin: false
+            } : undefined
           },
           response.data.token
         )
     
         toast.success('Đăng nhập thành công!')
         
-        // Redirect theo role và position
+        // Redirect theo role
         if (response.data.role === 'ADMIN') {
           router.push('/admin')
-        } else if (response.data.role === 'EMPLOYEE' && response.data.position) {
-          switch (response.data.position) {
-            case 'WAREHOUSE':
-              router.push('/warehouse')
-              break
-            case 'PRODUCT_MANAGER':
-              router.push('/product-manager')
-              break
-            case 'SALE':
-              router.push('/sales')
-              break
-            case 'ACCOUNTANT':
-              router.push('/admin/accounting')
-              break
-            default:
-              router.push('/')
-              break
-          }
+        } else if (response.data.role === 'EMPLOYEE') {
+          router.push('/employee')
         } else {
+          // CUSTOMER hoặc role khác
           router.push('/')
         }
       }

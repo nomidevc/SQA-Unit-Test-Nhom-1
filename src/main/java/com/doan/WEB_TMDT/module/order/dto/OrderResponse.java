@@ -24,6 +24,14 @@ public class OrderResponse {
     private String customerPhone; // Từ Customer entity
     private String customerEmail; // Từ User entity
     private String shippingAddress;
+    
+    // Detailed address (for warehouse)
+    private String province;      // Tên tỉnh/thành phố
+    private String district;      // Tên quận/huyện
+    private String ward;          // Ward code (for GHN API)
+    private String wardName;      // Tên phường/xã
+    private String address;       // Địa chỉ cụ thể (số nhà, đường)
+    
     private String note;
     
     // Items
@@ -40,6 +48,7 @@ public class OrderResponse {
     private LocalDateTime confirmedAt;
     private LocalDateTime shippedAt;
     private LocalDateTime deliveredAt;
+    private LocalDateTime completedAt; // Khách xác nhận nhận hàng
     private LocalDateTime cancelledAt;
     private String cancelReason;
     
@@ -48,4 +57,9 @@ public class OrderResponse {
     private String ghnShippingStatus;
     private LocalDateTime ghnCreatedAt;
     private LocalDateTime ghnExpectedDeliveryTime;
+    
+    // Shipper info (for internal delivery)
+    private Long shipperId;
+    private String shipperName;
+    private String shipperPhone;
 }

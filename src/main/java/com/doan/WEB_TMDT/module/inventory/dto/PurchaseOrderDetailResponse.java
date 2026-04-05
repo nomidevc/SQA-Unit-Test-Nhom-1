@@ -20,6 +20,7 @@ public class PurchaseOrderDetailResponse {
     private LocalDateTime receivedDate;
     private String createdBy;
     private String note;
+    private Double totalAmount; // Tổng tiền phiếu nhập
     private SupplierInfo supplier;
     private List<PurchaseOrderItemInfo> items;
     

@@ -94,46 +94,79 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public ProductWithSpecsDTO toProductWithSpecs(Product product) {
-        // Lấy danh sách ảnh
-        List<com.doan.WEB_TMDT.module.product.dto.ProductImageDTO> images = 
-            imageRepository.findByProductIdOrderByDisplayOrderAsc(product.getId())
-                .stream()
-                .map(this::toImageDTO)
-                .collect(Collectors.toList());
-        
-        // Debug log
-        System.out.println("Product: " + product.getName() + ", Category: " + 
-            (product.getCategory() != null ? product.getCategory().getName() : "NULL"));
-        
-        var dto = ProductWithSpecsDTO.builder()
-                .id(product.getId())
-                .name(product.getName())
-                .sku(product.getSku())
-                .price(product.getPrice())
-                .description(product.getDescription())
-                .stockQuantity(product.getStockQuantity())
-                .categoryId(product.getCategory() != null ? product.getCategory().getId() : null)
-                .categoryName(product.getCategory() != null ? product.getCategory().getName() : null)
-                .images(images)
-                .build();
-
-        // Lấy specifications từ techSpecsJson của Product
-        if (product.getTechSpecsJson() != null && !product.getTechSpecsJson().isEmpty()) {
+        try {
+            // Lấy danh sách ảnh
+            List<com.doan.WEB_TMDT.module.product.dto.ProductImageDTO> images = 
+                imageRepository.findByProductIdOrderByDisplayOrderAsc(product.getId())
+                    .stream()
+                    .map(this::toImageDTO)
+                    .collect(Collectors.toList());
+            
+            // Tính số lượng khả dụng từ InventoryStock (đã trừ reserved và damaged)
+            Long availableQty = 0L;
             try {
-                // Parse JSON string thành Map
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                @SuppressWarnings("unchecked")
-                Map<String, String> specs = mapper.readValue(
-                    product.getTechSpecsJson(), 
-                    Map.class
-                );
-                dto.setSpecifications(specs);
+                if (product.getWarehouseProduct() != null) {
+                    Long wpId = product.getWarehouseProduct().getId();
+                    if (wpId != null) {
+                        Optional<com.doan.WEB_TMDT.module.inventory.entity.InventoryStock> stockOpt = 
+                                inventoryStockRepository.findByWarehouseProduct_Id(wpId);
+                        if (stockOpt.isPresent()) {
+                            availableQty = stockOpt.get().getSellable(); // onHand - reserved - damaged
+                        }
+                    }
+                }
             } catch (Exception e) {
-                System.err.println("Error parsing techSpecsJson: " + e.getMessage());
+                // Fallback nếu có lỗi lazy loading
+                System.err.println("Error loading warehouse product for product " + product.getId() + ": " + e.getMessage());
             }
-        }
+            
+            if (availableQty == 0L) {
+                // Fallback nếu không có WarehouseProduct hoặc có lỗi
+                Long stockQty = product.getStockQuantity() != null ? product.getStockQuantity() : 0L;
+                Long reservedQty = product.getReservedQuantity() != null ? product.getReservedQuantity() : 0L;
+                availableQty = Math.max(0, stockQty - reservedQty);
+            }
+        
+            var dto = ProductWithSpecsDTO.builder()
+                    .id(product.getId())
+                    .name(product.getName())
+                    .sku(product.getSku())
+                    .price(product.getPrice())
+                    .description(product.getDescription())
+                    .stockQuantity(product.getStockQuantity())
+                    .reservedQuantity(product.getReservedQuantity())
+                    .availableQuantity(availableQty.intValue()) // Số lượng thực sự có thể bán
+                    .categoryId(product.getCategory() != null ? product.getCategory().getId() : null)
+                    .categoryName(product.getCategory() != null ? product.getCategory().getName() : null)
+                    .images(images)
+                    .build();
 
-        return dto;
+            // Lấy specifications từ techSpecsJson của Product
+            if (product.getTechSpecsJson() != null && !product.getTechSpecsJson().isEmpty()) {
+                try {
+                    // Parse JSON string thành Map
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    @SuppressWarnings("unchecked")
+                    Map<String, String> specs = mapper.readValue(
+                        product.getTechSpecsJson(), 
+                        Map.class
+                    );
+                    dto.setSpecifications(specs);
+                } catch (Exception e) {
+                    System.err.println("Error parsing techSpecsJson: " + e.getMessage());
+                }
+            }
+
+            return dto;
+        } catch (Exception e) {
+            System.err.println("Error in toProductWithSpecs for product " + product.getId() + ": " + e.getMessage());
+            // Return basic DTO without specs
+            return ProductWithSpecsDTO.builder()
+                    .id(product.getId())
+                    .name(product.getName())
+                    .price(product.getPrice())
+                    .build();
+        }
     }
 
     @Override

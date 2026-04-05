@@ -34,15 +34,8 @@ public class CartController {
     public ApiResponse addToCart(
             @Valid @RequestBody AddToCartRequest request,
             Authentication authentication) {
-        System.out.println("========== ADD TO CART REQUEST ==========");
-        System.out.println("Product ID: " + request.getProductId());
-        System.out.println("Quantity: " + request.getQuantity());
-        
         Long customerId = getCustomerIdFromAuth(authentication);
-        System.out.println("Customer ID from auth: " + customerId);
-        
         ApiResponse response = cartService.addToCart(customerId, request);
-        System.out.println("========== ADD TO CART RESPONSE ==========");
         return response;
     }
 

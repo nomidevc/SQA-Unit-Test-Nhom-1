@@ -106,8 +106,20 @@ export default function RegisterPage() {
                 {
                   id: loginResponse.data.userId,
                   email: loginResponse.data.email,
+                  fullName: loginResponse.data.fullName,
+                  phone: loginResponse.data.phone,
+                  address: loginResponse.data.address,
                   role: loginResponse.data.role,
+                  position: loginResponse.data.position,
                   status: loginResponse.data.status,
+                  // Thêm employee object nếu là EMPLOYEE
+                  employee: loginResponse.data.role === 'EMPLOYEE' ? {
+                    fullName: loginResponse.data.fullName,
+                    phone: loginResponse.data.phone,
+                    address: loginResponse.data.address,
+                    position: loginResponse.data.position,
+                    firstLogin: false
+                  } : undefined
                 },
                 loginResponse.data.token
               )

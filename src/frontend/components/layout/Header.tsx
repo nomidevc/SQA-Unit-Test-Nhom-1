@@ -210,31 +210,13 @@ export default function Header() {
                           </Link>
                         </>
                       )}
-                      {(user.role === 'EMPLOYEE' && user.position === 'WAREHOUSE') && (
+                      {user.role === 'EMPLOYEE' && (
                         <Link
-                          href="/warehouse"
+                          href="/employee"
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                           onClick={() => setIsUserMenuOpen(false)}
                         >
-                          Quản lý kho
-                        </Link>
-                      )}
-                      {(user.role === 'EMPLOYEE' && user.position === 'ACCOUNTANT') && (
-                        <Link
-                          href="/admin/accounting"
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                          onClick={() => setIsUserMenuOpen(false)}
-                        >
-                          Kế toán & Đối soát
-                        </Link>
-                      )}
-                      {(user.role === 'EMPLOYEE' && user.position === 'SALES') && (
-                        <Link
-                          href="/sales"
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                          onClick={() => setIsUserMenuOpen(false)}
-                        >
-                          Quản lý bán hàng
+                          Trang nhân viên
                         </Link>
                       )}
                       <button

@@ -364,10 +364,14 @@ function PaymentModal({ payable, onClose, onSuccess }: {
 
     try {
       setLoading(true)
+      
+      // Format date to YYYY-MM-DD for LocalDate
+      const formattedDate = paymentDate // Already in YYYY-MM-DD format from input[type="date"]
+      
       const response = await payableApi.makePayment({
         payableId: payable.id,
         amount: amountNum,
-        paymentDate,
+        paymentDate: formattedDate,
         paymentMethod,
         referenceNumber: referenceNumber || undefined,
         note: note || undefined
@@ -380,6 +384,7 @@ function PaymentModal({ payable, onClose, onSuccess }: {
         toast.error(response.message || 'Thanh toán thất bại')
       }
     } catch (error: any) {
+      console.error('Payment error:', error)
       toast.error(error.message || 'Lỗi khi thanh toán')
     } finally {
       setLoading(false)

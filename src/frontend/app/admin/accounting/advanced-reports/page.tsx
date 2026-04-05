@@ -25,7 +25,7 @@ export default function AdvancedReportsPage() {
 
     const authData = JSON.parse(authStorage)
     const userData = authData.state?.user
-    
+
     if (!userData) {
       router.push('/login')
       return
@@ -33,7 +33,7 @@ export default function AdvancedReportsPage() {
 
     const isAdmin = userData.role === 'ADMIN'
     const isAccountant = userData.position === 'ACCOUNTANT'
-    
+
     if (!isAdmin && !isAccountant) {
       toast.error('Bạn không có quyền truy cập')
       router.push('/')
@@ -44,7 +44,7 @@ export default function AdvancedReportsPage() {
     const end = new Date()
     const start = new Date()
     start.setMonth(start.getMonth() - 3)
-    
+
     setDateRange({
       startDate: start.toISOString().split('T')[0],
       endDate: end.toISOString().split('T')[0],
@@ -124,8 +124,20 @@ export default function AdvancedReportsPage() {
                   <span className="font-medium text-red-600">{reportData.shippingCosts?.toLocaleString('vi-VN')} ₫</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Phí cổng thanh toán:</span>
-                  <span className="font-medium text-red-600">{reportData.paymentFees?.toLocaleString('vi-VN')} ₫</span>
+                  <span className="text-gray-600">Chi phí thuế:</span>
+                  <span className="font-medium text-red-600">{reportData.taxExpense?.toLocaleString('vi-VN')} ₫</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Thanh toán NCC:</span>
+                  <span className="font-medium text-red-600">{reportData.supplierPayments?.toLocaleString('vi-VN')} ₫</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Chi phí khác:</span>
+                  <span className="font-medium text-red-600">{reportData.otherExpense?.toLocaleString('vi-VN')} ₫</span>
+                </div>
+                <div className="flex justify-between border-t pt-2 font-bold">
+                  <span>Tổng chi phí:</span>
+                  <span className="text-red-600">{reportData.totalExpense?.toLocaleString('vi-VN')} ₫</span>
                 </div>
               </div>
             </div>
@@ -252,8 +264,8 @@ export default function AdvancedReportsPage() {
                   <span className="text-lg font-bold text-red-600">{item.amount?.toLocaleString('vi-VN')} ₫</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-red-500 h-2 rounded-full" 
+                  <div
+                    className="bg-red-500 h-2 rounded-full"
                     style={{ width: `${item.percentage}%` }}
                   ></div>
                 </div>
@@ -279,11 +291,10 @@ export default function AdvancedReportsPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <button
               onClick={() => setReportType('profit-loss')}
-              className={`p-4 rounded-lg border-2 transition-colors ${
-                reportType === 'profit-loss' 
-                  ? 'border-blue-500 bg-blue-50' 
+              className={`p-4 rounded-lg border-2 transition-colors ${reportType === 'profit-loss'
+                  ? 'border-blue-500 bg-blue-50'
                   : 'border-gray-200 hover:border-gray-300'
-              }`}
+                }`}
             >
               <FiBarChart className="mx-auto mb-2" size={24} />
               <h3 className="font-medium">Báo cáo lãi lỗ</h3>
@@ -292,11 +303,10 @@ export default function AdvancedReportsPage() {
 
             <button
               onClick={() => setReportType('cash-flow')}
-              className={`p-4 rounded-lg border-2 transition-colors ${
-                reportType === 'cash-flow' 
-                  ? 'border-green-500 bg-green-50' 
+              className={`p-4 rounded-lg border-2 transition-colors ${reportType === 'cash-flow'
+                  ? 'border-green-500 bg-green-50'
                   : 'border-gray-200 hover:border-gray-300'
-              }`}
+                }`}
             >
               <FiTrendingUp className="mx-auto mb-2" size={24} />
               <h3 className="font-medium">Báo cáo dòng tiền</h3>
@@ -305,11 +315,10 @@ export default function AdvancedReportsPage() {
 
             <button
               onClick={() => setReportType('expense-analysis')}
-              className={`p-4 rounded-lg border-2 transition-colors ${
-                reportType === 'expense-analysis' 
-                  ? 'border-purple-500 bg-purple-50' 
+              className={`p-4 rounded-lg border-2 transition-colors ${reportType === 'expense-analysis'
+                  ? 'border-purple-500 bg-purple-50'
                   : 'border-gray-200 hover:border-gray-300'
-              }`}
+                }`}
             >
               <FiPieChart className="mx-auto mb-2" size={24} />
               <h3 className="font-medium">Phân tích chi phí</h3>
@@ -324,7 +333,7 @@ export default function AdvancedReportsPage() {
               <input
                 type="date"
                 value={dateRange.startDate}
-                onChange={(e) => setDateRange({...dateRange, startDate: e.target.value})}
+                onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })}
                 className="w-full border border-gray-300 rounded-lg px-4 py-2"
               />
             </div>
@@ -333,7 +342,7 @@ export default function AdvancedReportsPage() {
               <input
                 type="date"
                 value={dateRange.endDate}
-                onChange={(e) => setDateRange({...dateRange, endDate: e.target.value})}
+                onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })}
                 className="w-full border border-gray-300 rounded-lg px-4 py-2"
               />
             </div>
@@ -341,7 +350,7 @@ export default function AdvancedReportsPage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Nhóm theo</label>
               <select
                 value={dateRange.groupBy}
-                onChange={(e) => setDateRange({...dateRange, groupBy: e.target.value})}
+                onChange={(e) => setDateRange({ ...dateRange, groupBy: e.target.value })}
                 className="w-full border border-gray-300 rounded-lg px-4 py-2"
               >
                 <option value="DAILY">Ngày</option>

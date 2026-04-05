@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { FiTruck, FiDownload, FiSearch } from 'react-icons/fi'
+import { FiTruck, FiSearch } from 'react-icons/fi'
 
 export default function ShippingReconciliationPage() {
   const router = useRouter()
@@ -82,49 +82,6 @@ export default function ShippingReconciliationPage() {
     }
   }
 
-  const exportExcel = async () => {
-    if (!reconciliationData) {
-      toast.error('Chưa có dữ liệu để xuất')
-      return
-    }
-
-    try {
-      setLoading(true)
-      const token = localStorage.getItem('token')
-      const response = await fetch(
-        `http://localhost:8080/api/accounting/shipping-reconciliation/export?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      )
-
-      const result = await response.json()
-      if (result.success) {
-        // Decode base64 and download
-        const blob = new Blob([
-          Uint8Array.from(atob(result.data.data), c => c.charCodeAt(0))
-        ], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = result.data.fileName
-        a.click()
-        
-        toast.success('Xuất Excel thành công')
-      } else {
-        toast.error(result.message || 'Lỗi khi xuất Excel')
-      }
-    } catch (error) {
-      console.error('Error:', error)
-      toast.error('Lỗi khi xuất Excel')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -154,25 +111,15 @@ export default function ShippingReconciliationPage() {
                 className="w-full border border-gray-300 rounded-lg px-4 py-2"
               />
             </div>
-            <div className="flex items-end space-x-2">
+            <div className="flex items-end">
               <button
                 onClick={loadShippingReconciliation}
                 disabled={loading}
-                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"
+                className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"
               >
                 <FiSearch className="mr-2" />
-                Tải dữ liệu
+                {loading ? 'Đang tải...' : 'Tải dữ liệu'}
               </button>
-              {reconciliationData && (
-                <button
-                  onClick={exportExcel}
-                  disabled={loading}
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center"
-                >
-                  <FiDownload className="mr-2" />
-                  Excel
-                </button>
-              )}
             </div>
           </div>
         </div>

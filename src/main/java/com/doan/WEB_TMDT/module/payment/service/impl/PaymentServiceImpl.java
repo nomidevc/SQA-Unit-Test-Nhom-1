@@ -5,6 +5,7 @@ import com.doan.WEB_TMDT.module.auth.entity.User;
 import com.doan.WEB_TMDT.module.auth.repository.UserRepository;
 import com.doan.WEB_TMDT.module.order.entity.Order;
 import com.doan.WEB_TMDT.module.order.repository.OrderRepository;
+import com.doan.WEB_TMDT.module.order.service.OrderService;
 import com.doan.WEB_TMDT.module.payment.dto.CreatePaymentRequest;
 import com.doan.WEB_TMDT.module.payment.dto.PaymentResponse;
 import com.doan.WEB_TMDT.module.payment.dto.SepayWebhookRequest;
@@ -38,6 +39,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final UserRepository userRepository;
     private final com.doan.WEB_TMDT.module.payment.repository.BankAccountRepository bankAccountRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final OrderService orderService;
 
     @Value("${sepay.bank.code:VCB}")
     private String sepayBankCode;
@@ -271,15 +273,34 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
+    @Transactional
     public ApiResponse checkPaymentStatus(String paymentCode) {
         Payment payment = paymentRepository.findByPaymentCode(paymentCode)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy thanh toán"));
 
-        // Check if expired
+        // Check if expired - realtime check
         if (payment.getStatus() == PaymentStatus.PENDING && 
             LocalDateTime.now().isAfter(payment.getExpiredAt())) {
+            
+            log.info("Payment {} expired, processing cancellation...", paymentCode);
+            
+            // 1. Cập nhật Payment → EXPIRED
             payment.setStatus(PaymentStatus.EXPIRED);
+            payment.setFailureReason("Không thanh toán trong thời gian quy định");
             paymentRepository.save(payment);
+            
+            // 2. Gọi hàm hủy đơn của khách hàng (sẽ tự động giải phóng stock)
+            Order order = payment.getOrder();
+            if (order != null && order.getStatus() == com.doan.WEB_TMDT.module.order.entity.OrderStatus.PENDING_PAYMENT) {
+                try {
+                    Long customerId = order.getCustomer().getId();
+                    orderService.cancelOrderByCustomer(order.getId(), customerId, "Không thanh toán trong thời gian quy định");
+                    log.info("Cancelled order {} due to payment expiration (realtime check)", order.getOrderCode());
+                } catch (Exception e) {
+                    log.error("Failed to cancel order {} due to payment expiration: {}", 
+                        order.getOrderCode(), e.getMessage());
+                }
+            }
         }
 
         PaymentResponse response = toPaymentResponse(payment);
@@ -290,25 +311,36 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional
     public void expireOldPayments() {
         LocalDateTime now = LocalDateTime.now();
+        
+        // Tìm các payment PENDING đã quá hạn
         List<Payment> expiredPayments = paymentRepository
                 .findByStatusAndExpiredAtBefore(PaymentStatus.PENDING, now);
 
+        log.info("Found {} expired payments to process", expiredPayments.size());
+
         for (Payment payment : expiredPayments) {
+            // 1. Cập nhật Payment → EXPIRED
             payment.setStatus(PaymentStatus.EXPIRED);
-            payment.setFailureReason("Hết hạn thanh toán");
+            payment.setFailureReason("Không thanh toán trong thời gian quy định");
             paymentRepository.save(payment);
 
-            // Update order
+            // 2. Gọi hàm hủy đơn của khách hàng (sẽ tự động giải phóng stock)
             Order order = payment.getOrder();
-            if (order.getStatus() == com.doan.WEB_TMDT.module.order.entity.OrderStatus.PENDING_PAYMENT) {
-                order.setStatus(com.doan.WEB_TMDT.module.order.entity.OrderStatus.CANCELLED);
-                order.setCancelledAt(now);
-                order.setCancelReason("Hết hạn thanh toán");
-                orderRepository.save(order);
+            if (order != null && order.getStatus() == com.doan.WEB_TMDT.module.order.entity.OrderStatus.PENDING_PAYMENT) {
+                try {
+                    Long customerId = order.getCustomer().getId();
+                    orderService.cancelOrderByCustomer(order.getId(), customerId, "Không thanh toán trong thời gian quy định");
+                    log.info("Cancelled order {} due to payment expiration", order.getOrderCode());
+                } catch (Exception e) {
+                    log.error("Failed to cancel order {} due to payment expiration: {}", 
+                        order.getOrderCode(), e.getMessage());
+                }
             }
         }
 
-        log.info("Expired {} old payments", expiredPayments.size());
+        if (!expiredPayments.isEmpty()) {
+            log.info("Expired {} old payments and cancelled their orders", expiredPayments.size());
+        }
     }
 
     @Override

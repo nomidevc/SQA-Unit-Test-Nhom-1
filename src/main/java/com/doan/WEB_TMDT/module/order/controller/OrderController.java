@@ -119,6 +119,27 @@ public class OrderController {
         return orderService.getShippingStatus(orderId, customerId);
     }
 
+    /**
+     * Khách hàng xác nhận đã nhận hàng
+     */
+    @PutMapping("/{orderId}/confirm-received")
+    @PreAuthorize("hasAnyAuthority('CUSTOMER', 'ADMIN')")
+    public ApiResponse confirmReceived(
+            @PathVariable Long orderId,
+            Authentication authentication) {
+        Long customerId = getCustomerIdFromAuth(authentication);
+        return orderService.confirmReceived(orderId, customerId);
+    }
+
+    /**
+     * Lấy danh sách đơn hàng của 1 khách hàng (cho nhân viên/admin)
+     */
+    @GetMapping("/customer/{customerId}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'EMPLOYEE', 'SALE', 'WAREHOUSE', 'SHIPPER', 'PRODUCT_MANAGER', 'ACCOUNTANT', 'CSKH')")
+    public ApiResponse getOrdersByCustomerId(@PathVariable Long customerId) {
+        return orderService.getOrdersByCustomerId(customerId);
+    }
+
     // Helper method
     private Long getCustomerIdFromAuth(Authentication authentication) {
         if (authentication == null || authentication.getName() == null) {

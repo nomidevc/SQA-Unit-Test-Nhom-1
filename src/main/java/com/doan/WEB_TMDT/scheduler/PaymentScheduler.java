@@ -18,11 +18,11 @@ public class PaymentScheduler {
 
     /**
      * Tự động hết hạn các payment cũ
-     * Chạy mỗi 10 phút (tối ưu tài nguyên)
+     * Chạy mỗi 1 phút để đảm bảo hủy đơn kịp thời
      */
-    @Scheduled(fixedRate = 600000) // 600 seconds = 10 minutes
+    @Scheduled(fixedRate = 15000) // 15 seconds
     public void expireOldPayments() {
-        log.debug("Running scheduled task: expireOldPayments");
+        log.info("=== SCHEDULER RUNNING: expireOldPayments at {} ===", java.time.LocalDateTime.now());
         try {
             paymentService.expireOldPayments();
         } catch (Exception e) {

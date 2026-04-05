@@ -56,36 +56,21 @@ export default function SuppliersPage() {
 
   const loadSuppliers = async () => {
     try {
-      // TODO: Call API
-      // const response = await supplierApi.getAll()
-      // setSuppliers(response.data)
-      
-      // Mock data
-      setSuppliers([
-        {
-          id: 1,
-          name: 'Apple Vietnam',
-          code: 'APPLE-VN',
-          contactPerson: 'Nguyễn Văn A',
-          phone: '0901234567',
-          email: 'contact@apple.vn',
-          address: 'Hà Nội',
-          status: 'ACTIVE',
-          createdAt: '2024-01-15T10:30:00'
-        },
-        {
-          id: 2,
-          name: 'Samsung Electronics',
-          code: 'SAMSUNG',
-          contactPerson: 'Trần Thị B',
-          phone: '0912345678',
-          email: 'info@samsung.vn',
-          address: 'TP.HCM',
-          status: 'ACTIVE',
-          createdAt: '2024-01-10T09:20:00'
+      const token = localStorage.getItem('token')
+      const response = await fetch('http://localhost:8080/api/inventory/suppliers', {
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
-      ])
+      })
+      const result = await response.json()
+      
+      if (result.success) {
+        setSuppliers(result.data || [])
+      } else {
+        toast.error('Không thể tải danh sách nhà cung cấp')
+      }
     } catch (error) {
+      console.error('Error loading suppliers:', error)
       toast.error('Lỗi khi tải danh sách nhà cung cấp')
     } finally {
       setLoading(false)
@@ -95,22 +80,48 @@ export default function SuppliersPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (!formData.name || !formData.phone) {
+      toast.error('Vui lòng nhập tên và số điện thoại')
+      return
+    }
+
     try {
-      // TODO: Call API
-      // await supplierApi.create(formData)
-      
-      toast.success('Thêm nhà cung cấp thành công!')
-      setShowCreateModal(false)
-      setFormData({
-        name: '',
-        code: '',
-        contactPerson: '',
-        phone: '',
-        email: '',
-        address: ''
+      const token = localStorage.getItem('token')
+      const response = await fetch('http://localhost:8080/api/inventory/suppliers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          taxCode: formData.code,
+          contactName: formData.contactPerson,
+          phone: formData.phone,
+          email: formData.email,
+          address: formData.address
+        })
       })
-      loadSuppliers()
+
+      const result = await response.json()
+      
+      if (result.success) {
+        toast.success('Thêm nhà cung cấp thành công!')
+        setShowCreateModal(false)
+        setFormData({
+          name: '',
+          code: '',
+          contactPerson: '',
+          phone: '',
+          email: '',
+          address: ''
+        })
+        loadSuppliers()
+      } else {
+        toast.error(result.message || 'Lỗi khi thêm nhà cung cấp')
+      }
     } catch (error) {
+      console.error('Error creating supplier:', error)
       toast.error('Lỗi khi thêm nhà cung cấp')
     }
   }
@@ -119,14 +130,26 @@ export default function SuppliersPage() {
     if (!supplierToDelete) return
 
     try {
-      // TODO: Call API
-      // await supplierApi.delete(supplierToDelete.id)
+      const token = localStorage.getItem('token')
+      const response = await fetch(`http://localhost:8080/api/inventory/suppliers/${supplierToDelete.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      const result = await response.json()
       
-      setSuppliers(suppliers.filter(s => s.id !== supplierToDelete.id))
-      toast.success('Đã xóa nhà cung cấp')
-      setShowDeleteModal(false)
-      setSupplierToDelete(null)
+      if (result.success) {
+        setSuppliers(suppliers.filter(s => s.id !== supplierToDelete.id))
+        toast.success('Đã xóa nhà cung cấp')
+        setShowDeleteModal(false)
+        setSupplierToDelete(null)
+      } else {
+        toast.error(result.message || 'Lỗi khi xóa nhà cung cấp')
+      }
     } catch (error) {
+      console.error('Error deleting supplier:', error)
       toast.error('Lỗi khi xóa nhà cung cấp')
     }
   }

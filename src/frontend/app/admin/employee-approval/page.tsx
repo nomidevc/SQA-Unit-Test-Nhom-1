@@ -17,6 +17,7 @@ export default function EmployeeApprovalPage() {
   const [employees, setEmployees] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState<string | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false) // ← Thêm state này
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -100,8 +101,17 @@ export default function EmployeeApprovalPage() {
   }
 
   const handleApprove = async (employeeId: string) => {
+    if (isProcessing) {
+      toast.error('Vui lòng đợi xử lý nhân viên trước đó hoàn tất!')
+      return
+    }
+    
     setProcessingId(employeeId)
+    setIsProcessing(true) // ← Đánh dấu đang xử lý
+    
     try {
+      console.log('🔄 Đang duyệt nhân viên:', employeeId)
+      
       const response = await fetch(`http://localhost:8080/api/employee-registration/approve/${employeeId}`, {
         method: 'POST',
         headers: {
@@ -113,15 +123,22 @@ export default function EmployeeApprovalPage() {
       const data = await response.json()
       
       if (data.success || response.ok) {
-        toast.success('Đã duyệt nhân viên thành công')
+        console.log('Duyệt thành công:', employeeId)
+        toast.success('Đã duyệt nhân viên thành công và gửi email!')
+        
+        // Đợi 1 giây trước khi reload để đảm bảo email đã gửi
+        await new Promise(resolve => setTimeout(resolve, 1000))
         loadPendingEmployees()
       } else {
+        console.error('Lỗi duyệt:', data.message)
         toast.error(data.message || 'Lỗi khi duyệt nhân viên')
       }
     } catch (error: any) {
+      console.error('Exception:', error)
       toast.error(error.message || 'Lỗi khi duyệt nhân viên')
     } finally {
       setProcessingId(null)
+      setIsProcessing(false) // ← Mở khóa
     }
   }
 
@@ -226,15 +243,17 @@ export default function EmployeeApprovalPage() {
                   <div className="flex space-x-2">
                     <button
                       onClick={() => handleApprove(employee.id)}
-                      disabled={processingId === employee.id}
+                      disabled={isProcessing} // ← Disable TẤT CẢ nút khi đang xử lý
                       className="flex-1 flex items-center justify-center space-x-2 bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <FiCheck />
-                      <span>Duyệt</span>
+                      <span>
+                        {processingId === employee.id ? 'Đang xử lý...' : 'Duyệt'}
+                      </span>
                     </button>
                     <button
                       onClick={() => handleReject(employee.id)}
-                      disabled={processingId === employee.id}
+                      disabled={isProcessing} // ← Disable TẤT CẢ nút khi đang xử lý
                       className="flex-1 flex items-center justify-center space-x-2 bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <FiX />

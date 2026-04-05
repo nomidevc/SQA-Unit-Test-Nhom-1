@@ -1,5 +1,7 @@
 'use client'
 
+import Image from 'next/image'
+
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg'
 }
@@ -12,8 +14,14 @@ export default function Logo({ size = 'md' }: LogoProps) {
   }
 
   return (
-    <div className={`${sizeClasses[size]} bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold`}>
-      <span className="text-sm">TW</span>
+    <div className={`${sizeClasses[size]} relative`}>
+      <Image 
+        src="/logo.png" 
+        alt="Logo" 
+        fill
+        className="object-contain"
+        priority
+      />
     </div>
   )
 }

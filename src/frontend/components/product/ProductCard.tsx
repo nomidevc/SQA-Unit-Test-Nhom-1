@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import Image from 'next/image'
 import { FiShoppingCart, FiHeart, FiStar } from 'react-icons/fi'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
@@ -29,7 +28,8 @@ export default function ProductCard({ product }: ProductCardProps) {
         // Dispatch event để cập nhật cart count
         window.dispatchEvent(new Event('cartUpdated'))
       } else {
-        toast.error('Không thể thêm vào giỏ hàng')
+        // Hiển thị message từ backend
+        toast.error(response.message || 'Không thể thêm vào giỏ hàng')
       }
     } catch (error: any) {
       console.error('Error adding to cart:', error)
@@ -60,13 +60,27 @@ export default function ProductCard({ product }: ProductCardProps) {
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 group">
       {/* Product Image */}
-      <div className="relative aspect-square overflow-hidden">
-        <Image
-          src={product.image}
-          alt={product.name}
-          fill
-          className="object-cover group-hover:scale-105 transition-transform duration-300"
-        />
+      <div className="relative aspect-square overflow-hidden bg-gray-100">
+        {(() => {
+          // Lấy ảnh từ nhiều nguồn có thể có
+          const imageUrl = product.imageUrl || 
+                          product.image || 
+                          (product.images && product.images.length > 0 
+                            ? (product.images.find((img: any) => img.isPrimary)?.imageUrl || product.images[0]?.imageUrl)
+                            : null);
+          
+          return imageUrl ? (
+            <img
+              src={imageUrl}
+              alt={product.name}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400">
+              No Image
+            </div>
+          );
+        })()}
         
         {/* Badge */}
         {product.badge && (

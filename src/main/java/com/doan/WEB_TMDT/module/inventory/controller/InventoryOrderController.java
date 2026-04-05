@@ -9,21 +9,19 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/inventory/orders")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE')")
+@PreAuthorize("isAuthenticated()")
 public class InventoryOrderController {
 
     private final OrderService orderService;
 
     /**
-     * Lấy danh sách đơn hàng cần xuất kho (status = CONFIRMED)
+     * Lấy danh sách đơn hàng cần xuất kho (status = CONFIRMED và chưa có trong export_orders)
      * Quản lý kho xem để chuẩn bị hàng
      */
     @GetMapping("/pending-export")
-    public ApiResponse getOrdersPendingExport(
-            @RequestParam(required = false, defaultValue = "0") int page,
-            @RequestParam(required = false, defaultValue = "20") int size) {
-        // Lấy các đơn hàng đã CONFIRMED, chưa xuất kho
-        return orderService.getAllOrders("CONFIRMED", page, size);
+    public ApiResponse getOrdersPendingExport() {
+        // Lấy các đơn hàng đã CONFIRMED, chưa xuất kho (chưa có trong export_orders)
+        return orderService.getOrdersPendingExport();
     }
 
     /**
@@ -32,6 +30,18 @@ public class InventoryOrderController {
     @GetMapping("/{orderId}")
     public ApiResponse getOrderDetail(@PathVariable Long orderId) {
         return orderService.getOrderById(orderId);
+    }
+
+    /**
+     * Lấy danh sách đơn hàng đã xuất kho (status = READY_TO_SHIP)
+     * Quản lý kho xem các đơn đã xuất, đang chờ tài xế lấy
+     */
+    @GetMapping("/exported")
+    public ApiResponse getOrdersExported(
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "20") int size) {
+        // Lấy các đơn hàng đã xuất kho (READY_TO_SHIP)
+        return orderService.getAllOrders("READY_TO_SHIP", page, size);
     }
 
     /**

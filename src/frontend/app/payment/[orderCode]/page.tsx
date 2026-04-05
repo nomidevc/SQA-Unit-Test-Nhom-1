@@ -127,12 +127,32 @@ export default function PaymentPage() {
           return
         }
         
+        // Check if expired or cancelled
+        if (paymentData.data.status === 'EXPIRED' || paymentData.data.status === 'CANCELLED') {
+          console.log('❌ Payment expired or cancelled! Redirecting...')
+          toast.error('Thanh toán đã hết hạn hoặc bị hủy')
+          setTimeout(() => {
+            router.push(`/orders/${orderCode}`)
+          }, 1500)
+          return
+        }
+        
         // Calculate time left based on expiredAt
         if (paymentData.data.expiredAt) {
           const expiredTime = new Date(paymentData.data.expiredAt).getTime()
           const now = Date.now()
           const secondsLeft = Math.max(0, Math.floor((expiredTime - now) / 1000))
           setTimeLeft(secondsLeft)
+          
+          // If already expired based on time
+          if (secondsLeft <= 0) {
+            console.log('⏰ Payment time expired! Redirecting...')
+            toast.error('Thanh toán đã hết hạn')
+            setTimeout(() => {
+              router.push(`/orders/${orderCode}`)
+            }, 1500)
+            return
+          }
         }
       }
     } catch (error: any) {
@@ -193,6 +213,16 @@ export default function PaymentPage() {
           if (data.data.status === 'SUCCESS' || data.data.status === 'PAID' || data.data.status === 'COMPLETED') {
             console.log('✅ Payment SUCCESS detected! Redirecting...')
             handlePaymentSuccess()
+          } else if (data.data.status === 'EXPIRED' || data.data.status === 'CANCELLED') {
+            // Payment expired or cancelled
+            console.log('❌ Payment EXPIRED/CANCELLED detected! Redirecting...')
+            if (pollingInterval.current) {
+              clearInterval(pollingInterval.current)
+            }
+            toast.error('Thanh toán đã hết hạn hoặc bị hủy')
+            setTimeout(() => {
+              router.push(`/orders/${params.orderCode}`)
+            }, 1500)
           } else {
             console.log('⏳ Payment still pending:', data.data.status)
           }

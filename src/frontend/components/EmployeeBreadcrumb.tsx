@@ -16,26 +16,35 @@ export default function EmployeeBreadcrumb({ items }: EmployeeBreadcrumbProps) {
   const { user } = useAuthStore()
 
   const getHomePath = () => {
-    switch (user?.role) {
+    // Check position for employees, role for admin
+    const position = user?.position || user?.employee?.position
+    
+    if (user?.role === 'ADMIN') return '/admin'
+    
+    switch (position) {
       case 'WAREHOUSE':
-        return '/warehouse'
       case 'PRODUCT_MANAGER':
-        return '/product-manager'
-      case 'ADMIN':
-        return '/admin'
+      case 'ACCOUNTANT':
+      case 'SALES':
+      case 'SALE':
+      case 'CSKH':
+      case 'SHIPPER':
+        return '/employee'
       default:
         return '/'
     }
   }
 
   const getHomeName = () => {
-    switch (user?.role) {
+    const position = user?.position || user?.employee?.position
+    
+    if (user?.role === 'ADMIN') return 'Quản trị'
+    
+    switch (position) {
       case 'WAREHOUSE':
         return 'Kho hàng'
       case 'PRODUCT_MANAGER':
         return 'Quản lý SP'
-      case 'ADMIN':
-        return 'Quản trị'
       default:
         return 'Trang chủ'
     }

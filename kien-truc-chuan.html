@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiến Trúc Hệ Thống - Chuẩn Spring Boot</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #f5f7fa;
+            padding: 30px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            padding: 40px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 40px;
+            font-size: 28px;
+        }
+
+        .architecture-diagram {
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        /* Client Side */
+        .client-side {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .client-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .client-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .client-tech {
+            font-size: 13px;
+            opacity: 0.9;
+            line-height: 1.8;
+        }
+
+        /* Server Side - Main */
+        .server-side {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .layer-box {
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .layer-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 12px;
+            text-align: center;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+        }
+
+        .layer-content {
+            font-size: 13px;
+            line-height: 1.8;
+        }
+
+        /* Layer Colors */
+        .presentation-layer {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .business-layer {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+
+        .persistence-layer {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            color: white;
+        }
+
+        .database-layer {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: white;
+        }
+
+        /* External Services */
+        .external-services {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .external-box {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .external-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .external-desc {
+            font-size: 12px;
+            color: #555;
+            line-height: 1.6;
+        }
+
+        /* Arrows */
+        .arrow-down {
+            text-align: center;
+            font-size: 24px;
+            color: #7f8c8d;
+            margin: -5px 0;
+        }
+
+        .arrow-horizontal {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #7f8c8d;
+        }
+
+        /* Connection Lines */
+        .connection-line {
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 12px;
+            font-weight: 600;
+            margin: 5px 0;
+        }
+
+        /* Module Grid */
+        .module-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .module-item {
+            background: rgba(255,255,255,0.2);
+            padding: 8px;
+            border-radius: 5px;
+            text-align: center;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        /* Legend */
+        .legend {
+            background: #ecf0f1;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 30px;
+        }
+
+        .legend-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+
+        .legend-items {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .legend-color {
+            width: 40px;
+            height: 25px;
+            border-radius: 5px;
+        }
+
+        .legend-text {
+            font-size: 13px;
+            color: #555;
+        }
+
+        @media print {
+            body { background: white; padding: 0; }
+            .container { box-shadow: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏗️ KIẾN TRÚC HỆ THỐNG - SPRING BOOT LAYERED ARCHITECTURE</h1>
+        
+        <div class="architecture-diagram">
+            <!-- CLIENT SIDE -->
+            <div class="client-side">
+                <div class="client-box">
+                    <div class="client-title">📱 CLIENT LAYER</div>
+                    <div style="font-size: 20px; margin: 15px 0;">Next.js</div>
+                    <div class="client-tech">
+                        • React Components<br>
+                        • TypeScript<br>
+                        • TailwindCSS<br>
+                        • Zustand State<br>
+                        • Axios HTTP Client
+                    </div>
+                </div>
+                
+                <div class="arrow-horizontal">→</div>
+                <div class="connection-line">REST API<br>(HTTPS/JSON)</div>
+                <div class="arrow-horizontal">→</div>
+            </div>
+
+            <!-- SERVER SIDE -->
+            <div class="server-side">
+                <!-- Presentation Layer -->
+                <div class="layer-box presentation-layer">
+                    <div class="layer-title">1️⃣ PRESENTATION LAYER</div>
+                    <div class="layer-content">
+                        <strong>Controllers (REST API)</strong><br>
+                        • Handle HTTP Requests<br>
+                        • Request/Response Mapping<br>
+                        • Input Validation<br>
+                        • JSON Serialization<br>
+                        • Exception Handling
+                        <div class="module-grid">
+                            <div class="module-item">Auth</div>
+                            <div class="module-item">Product</div>
+                            <div class="module-item">Order</div>
+                            <div class="module-item">Payment</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="arrow-down">↓</div>
+
+                <!-- Business Layer -->
+                <div class="layer-box business-layer">
+                    <div class="layer-title">2️⃣ BUSINESS LAYER</div>
+                    <div class="layer-content">
+                        <strong>Services (Business Logic)</strong><br>
+                        • Core Business Rules<br>
+                        • Transaction Management<br>
+                        • Data Validation<br>
+                        • Integration with External APIs<br>
+                        • Event Publishing
+                        <div class="module-grid">
+                            <div class="module-item">OrderService</div>
+                            <div class="module-item">PaymentService</div>
+                            <div class="module-item">InventoryService</div>
+                            <div class="module-item">ShippingService</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="arrow-down">↓</div>
+
+                <!-- Persistence Layer -->
+                <div class="layer-box persistence-layer">
+                    <div class="layer-title">3️⃣ PERSISTENCE LAYER</div>
+                    <div class="layer-content">
+                        <strong>Repositories (Data Access)</strong><br>
+                        • CRUD Operations<br>
+                        • Custom Queries<br>
+                        • JPA/Hibernate<br>
+                        • Transaction Support<br>
+                        • Database Locking
+                        <div class="module-grid">
+                            <div class="module-item">OrderRepo</div>
+                            <div class="module-item">ProductRepo</div>
+                            <div class="module-item">PaymentRepo</div>
+                            <div class="module-item">UserRepo</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="arrow-down">↓</div>
+
+                <!-- Database Layer -->
+                <div class="layer-box database-layer">
+                    <div class="layer-title">4️⃣ DATABASE LAYER</div>
+                    <div class="layer-content">
+                        <strong>MySQL Database</strong><br>
+                        • Data Storage<br>
+                        • Relationships & Constraints<br>
+                        • Indexes & Optimization<br>
+                        • Transactions (ACID)<br>
+                        • 25+ Tables
+                    </div>
+                </div>
+            </div>
+
+            <!-- EXTERNAL SERVICES -->
+            <div class="external-services">
+                <div style="text-align: center; color: #7f8c8d; font-weight: bold; margin-bottom: 10px;">
+                    ← API Calls từ<br>Business Layer
+                </div>
+                
+                <div class="external-box">
+                    <div class="external-title">💰 SePay API</div>
+                    <div class="external-desc">
+                        Payment Gateway<br>
+                        • Generate QR Code<br>
+                        • Webhook Handler<br>
+                        • Verify Signature
+                    </div>
+                </div>
+
+                <div class="external-box">
+                    <div class="external-title">📦 GHN API</div>
+                    <div class="external-desc">
+                        Shipping Service<br>
+                        • Create Order<br>
+                        • Track Status<br>
+                        • Calculate Fee
+                    </div>
+                </div>
+
+                <div class="external-box">
+                    <div class="external-title">📧 Email SMTP</div>
+                    <div class="external-desc">
+                        Email Service<br>
+                        • Send Notifications<br>
+                        • Templates<br>
+                        • Attachments
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="legend">
+            <div class="legend-title">📌 Giải thích các Layer:</div>
+            <div class="legend-items">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);"></div>
+                    <div class="legend-text"><strong>Presentation:</strong> Xử lý HTTP requests, REST API endpoints</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);"></div>
+                    <div class="legend-text"><strong>Business:</strong> Business logic, transactions, integrations</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);"></div>
+                    <div class="legend-text"><strong>Persistence:</strong> Database access, JPA repositories</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);"></div>
+                    <div class="legend-text"><strong>Database:</strong> MySQL data storage, ACID transactions</div>
+                </div>
+            </div>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #bdc3c7; color: #555; font-size: 13px;">
+                <strong>⚠️ Lưu ý:</strong> External Services được gọi từ <strong>Business Layer</strong> (Service classes), 
+                KHÔNG phải từ Presentation hay Persistence Layer. Điều này đảm bảo separation of concerns và dễ test.
+            </div>
+        </div>
+    </div>
+</body>
+</html>

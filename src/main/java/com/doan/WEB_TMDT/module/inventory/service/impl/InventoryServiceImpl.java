@@ -8,6 +8,8 @@ import com.doan.WEB_TMDT.module.inventory.dto.*;
 import com.doan.WEB_TMDT.module.inventory.entity.*;
 import com.doan.WEB_TMDT.module.inventory.repository.*;
 import com.doan.WEB_TMDT.module.inventory.service.InventoryService;
+import com.doan.WEB_TMDT.module.product.entity.Product;
+import com.doan.WEB_TMDT.module.product.repository.ProductRepository;
 
 // 💡 Thêm import entity ProductDetail đúng từ Product module
 import lombok.extern.slf4j.Slf4j;
@@ -32,10 +34,13 @@ public class InventoryServiceImpl implements InventoryService {
     private final ProductDetailRepository productDetailRepository;
     private final InventoryStockRepository inventoryStockRepository;
     private final SupplierRepository supplierRepository;
+    private final ProductRepository productRepository;
     private final com.doan.WEB_TMDT.module.inventory.service.ProductSpecificationService productSpecificationService;
     private final com.doan.WEB_TMDT.module.order.repository.OrderRepository orderRepository;
     private final ExportOrderItemRepository exportOrderItemRepository;
     private final com.doan.WEB_TMDT.module.accounting.service.SupplierPayableService supplierPayableService;
+    private final com.doan.WEB_TMDT.module.shipping.service.ShippingService shippingService;
+
     private String generateExportCode() {
         return "PX" + LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)
                 + "-" + String.format("%03d", new Random().nextInt(999));
@@ -48,7 +53,7 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     @Override
-    public  ApiResponse getOrCreateSupplier(CreateSupplierRequest req){
+    public ApiResponse getOrCreateSupplier(CreateSupplierRequest req){
 
         if (req.getTaxCode() != null) {
             Optional<Supplier> byTax = supplierRepository.findByTaxCode(req.getTaxCode());
@@ -85,6 +90,74 @@ public class InventoryServiceImpl implements InventoryService {
         Supplier savedSupplier = supplierRepository.save(supplier);
         return ApiResponse.success("OK", savedSupplier);
 
+    }
+
+    @Override
+    public ApiResponse createWarehouseProduct(CreateWarehouseProductRequest req) {
+        // Check if SKU already exists
+        Optional<WarehouseProduct> existing = warehouseProductRepository.findBySku(req.getSku());
+        if (existing.isPresent()) {
+            return ApiResponse.error("SKU đã tồn tại: " + req.getSku());
+        }
+
+        // Get supplier if provided
+        Supplier supplier = null;
+        if (req.getSupplierId() != null) {
+            supplier = supplierRepository.findById(req.getSupplierId())
+                    .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy nhà cung cấp #" + req.getSupplierId()));
+        }
+
+        // Create warehouse product
+        WarehouseProduct wp = WarehouseProduct.builder()
+                .sku(req.getSku())
+                .internalName(req.getInternalName())
+                .supplier(supplier)
+                .description(req.getDescription())
+                .techSpecsJson(req.getTechSpecsJson() != null ? req.getTechSpecsJson() : "{}")
+                .lastImportDate(LocalDateTime.now())
+                .build();
+
+        WarehouseProduct saved = warehouseProductRepository.save(wp);
+
+        // Parse and save specifications
+        productSpecificationService.parseAndSaveSpecs(saved);
+
+        return ApiResponse.success("Tạo sản phẩm kho thành công", saved);
+    }
+
+    @Override
+    public ApiResponse updateWarehouseProduct(Long id, CreateWarehouseProductRequest req) {
+        // Find existing product
+        WarehouseProduct wp = warehouseProductRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy sản phẩm #" + id));
+
+        // Check if SKU is being changed and already exists
+        if (!wp.getSku().equals(req.getSku())) {
+            Optional<WarehouseProduct> existing = warehouseProductRepository.findBySku(req.getSku());
+            if (existing.isPresent()) {
+                return ApiResponse.error("SKU đã tồn tại: " + req.getSku());
+            }
+            wp.setSku(req.getSku());
+        }
+
+        // Get supplier if provided
+        if (req.getSupplierId() != null) {
+            Supplier supplier = supplierRepository.findById(req.getSupplierId())
+                    .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy nhà cung cấp #" + req.getSupplierId()));
+            wp.setSupplier(supplier);
+        }
+
+        // Update fields
+        wp.setInternalName(req.getInternalName());
+        wp.setDescription(req.getDescription());
+        wp.setTechSpecsJson(req.getTechSpecsJson() != null ? req.getTechSpecsJson() : "{}");
+
+        WarehouseProduct updated = warehouseProductRepository.save(wp);
+
+        // Re-parse and save specifications
+        productSpecificationService.parseAndSaveSpecs(updated);
+
+        return ApiResponse.success("Cập nhật sản phẩm kho thành công", updated);
     }
 
 
@@ -133,16 +206,16 @@ public class InventoryServiceImpl implements InventoryService {
             WarehouseProduct wp = warehouseProductRepository.findBySku(i.getSku())
                     .orElseGet(() -> {
                         log.info("🆕 Tạo WarehouseProduct mới cho SKU: {}", i.getSku());
-                        
+
                         // Lấy thông tin từ request
                         String internalName = i.getInternalName() != null && !i.getInternalName().isEmpty()
                                 ? i.getInternalName()
                                 : "Sản phẩm mới - " + i.getSku();
-                        
+
                         String techSpecs = i.getTechSpecsJson() != null && !i.getTechSpecsJson().isEmpty()
                                 ? i.getTechSpecsJson()
                                 : "{}";
-                        
+
                         WarehouseProduct newWp = WarehouseProduct.builder()
                                 .sku(i.getSku())
                                 .internalName(internalName)
@@ -152,10 +225,10 @@ public class InventoryServiceImpl implements InventoryService {
                                 .techSpecsJson(techSpecs)
                                 .build();
                         WarehouseProduct savedWp = warehouseProductRepository.save(newWp);
-                        
+
                         // Parse và lưu specifications vào bảng riêng
                         productSpecificationService.parseAndSaveSpecs(savedWp);
-                        
+
                         return savedWp;
                     });
 
@@ -266,6 +339,9 @@ public class InventoryServiceImpl implements InventoryService {
 
             stock.setOnHand(stock.getOnHand() + details.size());
             inventoryStockRepository.save(stock);
+
+            // 7️⃣ Đồng bộ với bảng Product
+            syncStockWithProduct(wp, stock.getOnHand());
         }
 
         // 7️⃣ Cập nhật phiếu nhập
@@ -346,6 +422,9 @@ public class InventoryServiceImpl implements InventoryService {
             stock.setOnHand(stock.getOnHand() - exportCount);
             inventoryStockRepository.save(stock);
 
+            // Đồng bộ với bảng Product
+            syncStockWithProduct(product, stock.getOnHand());
+
             // 6️⃣ Ghi dòng chi tiết phiếu xuất
             ExportOrderItem item = ExportOrderItem.builder()
                     .exportOrder(exportOrder)
@@ -375,7 +454,30 @@ public class InventoryServiceImpl implements InventoryService {
         } else {
             orders = purchaseOrderRepository.findAll();
         }
-        return ApiResponse.success("Danh sách phiếu nhập", orders);
+        
+        // Map to DTO with totalAmount and supplierName
+        List<com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderListResponse> orderDTOs = orders.stream()
+                .map(po -> {
+                    // Calculate total amount
+                    double totalAmount = po.getItems() != null ? po.getItems().stream()
+                            .mapToDouble(item -> (item.getUnitCost() != null ? item.getUnitCost() : 0.0) * 
+                                                (item.getQuantity() != null ? item.getQuantity() : 0L))
+                            .sum() : 0.0;
+                    
+                    return com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderListResponse.builder()
+                            .id(po.getId())
+                            .poCode(po.getPoCode())
+                            .supplierName(po.getSupplier() != null ? po.getSupplier().getName() : "N/A")
+                            .orderDate(po.getOrderDate())
+                            .receivedDate(po.getReceivedDate())
+                            .status(po.getStatus().name())
+                            .totalAmount(totalAmount)
+                            .itemCount(po.getItems() != null ? po.getItems().size() : 0)
+                            .build();
+                })
+                .toList();
+        
+        return ApiResponse.success("Danh sách phiếu nhập", orderDTOs);
     }
 
     @Override
@@ -393,12 +495,12 @@ public class InventoryServiceImpl implements InventoryService {
     public ApiResponse getPurchaseOrderDetail(Long id) {
         PurchaseOrder po = purchaseOrderRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy phiếu nhập #" + id));
-        
+
         // Map to DTO to avoid circular reference
         com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderDetailResponse dto = mapToPurchaseOrderDetailDTO(po);
         return ApiResponse.success("Chi tiết phiếu nhập", dto);
     }
-    
+
     private com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderDetailResponse mapToPurchaseOrderDetailDTO(PurchaseOrder po) {
         // Map supplier
         com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderDetailResponse.SupplierInfo supplierInfo = null;
@@ -415,50 +517,56 @@ public class InventoryServiceImpl implements InventoryService {
                     .paymentTerm(po.getSupplier().getPaymentTerm())
                     .build();
         }
-        
+
         // Map items
-        List<com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderDetailResponse.PurchaseOrderItemInfo> itemInfos = 
+        List<com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderDetailResponse.PurchaseOrderItemInfo> itemInfos =
                 po.getItems().stream().map(item -> {
-            // Map warehouse product
-            com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderDetailResponse.WarehouseProductInfo wpInfo = null;
-            if (item.getWarehouseProduct() != null) {
-                WarehouseProduct wp = item.getWarehouseProduct();
-                wpInfo = com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderDetailResponse.WarehouseProductInfo.builder()
-                        .id(wp.getId())
-                        .sku(wp.getSku())
-                        .internalName(wp.getInternalName())
-                        .description(wp.getDescription())
-                        .techSpecsJson(wp.getTechSpecsJson())
-                        .build();
-            }
-            
-            // Map product details (serials)
-            List<com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderDetailResponse.ProductDetailInfo> detailInfos = null;
-            if (item.getProductDetails() != null) {
-                detailInfos = item.getProductDetails().stream()
-                        .map(detail -> com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderDetailResponse.ProductDetailInfo.builder()
-                                .id(detail.getId())
-                                .serialNumber(detail.getSerialNumber())
-                                .importPrice(detail.getImportPrice())
-                                .importDate(detail.getImportDate())
-                                .status(detail.getStatus().name())
-                                .warrantyMonths(detail.getWarrantyMonths())
-                                .build())
-                        .toList();
-            }
-            
-            return com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderDetailResponse.PurchaseOrderItemInfo.builder()
-                    .id(item.getId())
-                    .sku(item.getSku())
-                    .quantity(item.getQuantity().intValue())
-                    .unitCost(item.getUnitCost())
-                    .warrantyMonths(item.getWarrantyMonths())
-                    .note(item.getNote())
-                    .warehouseProduct(wpInfo)
-                    .productDetails(detailInfos)
-                    .build();
-        }).toList();
-        
+                    // Map warehouse product
+                    com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderDetailResponse.WarehouseProductInfo wpInfo = null;
+                    if (item.getWarehouseProduct() != null) {
+                        WarehouseProduct wp = item.getWarehouseProduct();
+                        wpInfo = com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderDetailResponse.WarehouseProductInfo.builder()
+                                .id(wp.getId())
+                                .sku(wp.getSku())
+                                .internalName(wp.getInternalName())
+                                .description(wp.getDescription())
+                                .techSpecsJson(wp.getTechSpecsJson())
+                                .build();
+                    }
+
+                    // Map product details (serials)
+                    List<com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderDetailResponse.ProductDetailInfo> detailInfos = null;
+                    if (item.getProductDetails() != null) {
+                        detailInfos = item.getProductDetails().stream()
+                                .map(detail -> com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderDetailResponse.ProductDetailInfo.builder()
+                                        .id(detail.getId())
+                                        .serialNumber(detail.getSerialNumber())
+                                        .importPrice(detail.getImportPrice())
+                                        .importDate(detail.getImportDate())
+                                        .status(detail.getStatus().name())
+                                        .warrantyMonths(detail.getWarrantyMonths())
+                                        .build())
+                                .toList();
+                    }
+
+                    return com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderDetailResponse.PurchaseOrderItemInfo.builder()
+                            .id(item.getId())
+                            .sku(item.getSku())
+                            .quantity(item.getQuantity().intValue())
+                            .unitCost(item.getUnitCost())
+                            .warrantyMonths(item.getWarrantyMonths())
+                            .note(item.getNote())
+                            .warehouseProduct(wpInfo)
+                            .productDetails(detailInfos)
+                            .build();
+                }).toList();
+
+        // Tính tổng tiền
+        double totalAmount = po.getItems().stream()
+                .mapToDouble(item -> (item.getUnitCost() != null ? item.getUnitCost() : 0.0) * 
+                                    (item.getQuantity() != null ? item.getQuantity() : 0L))
+                .sum();
+
         return com.doan.WEB_TMDT.module.inventory.dto.PurchaseOrderDetailResponse.builder()
                 .id(po.getId())
                 .poCode(po.getPoCode())
@@ -467,6 +575,7 @@ public class InventoryServiceImpl implements InventoryService {
                 .receivedDate(po.getReceivedDate())
                 .createdBy(po.getCreatedBy())
                 .note(po.getNote())
+                .totalAmount(totalAmount)
                 .supplier(supplierInfo)
                 .items(itemInfos)
                 .build();
@@ -476,42 +585,42 @@ public class InventoryServiceImpl implements InventoryService {
     public ApiResponse getExportOrderDetail(Long id) {
         ExportOrder eo = exportOrderRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy phiếu xuất #" + id));
-        
+
         // Map to DTO
         com.doan.WEB_TMDT.module.inventory.dto.ExportOrderDetailResponse dto = mapToExportOrderDetailDTO(eo);
         return ApiResponse.success("Chi tiết phiếu xuất", dto);
     }
-    
+
     private com.doan.WEB_TMDT.module.inventory.dto.ExportOrderDetailResponse mapToExportOrderDetailDTO(ExportOrder eo) {
-        List<com.doan.WEB_TMDT.module.inventory.dto.ExportOrderDetailResponse.ExportOrderItemInfo> itemInfos = 
+        List<com.doan.WEB_TMDT.module.inventory.dto.ExportOrderDetailResponse.ExportOrderItemInfo> itemInfos =
                 eo.getItems().stream().map(item -> {
-            // Map warehouse product
-            com.doan.WEB_TMDT.module.inventory.dto.ExportOrderDetailResponse.WarehouseProductInfo wpInfo = null;
-            if (item.getWarehouseProduct() != null) {
-                wpInfo = com.doan.WEB_TMDT.module.inventory.dto.ExportOrderDetailResponse.WarehouseProductInfo.builder()
-                        .id(item.getWarehouseProduct().getId())
-                        .sku(item.getWarehouseProduct().getSku())
-                        .internalName(item.getWarehouseProduct().getInternalName())
-                        .description(item.getWarehouseProduct().getDescription())
-                        .techSpecsJson(item.getWarehouseProduct().getTechSpecsJson())
-                        .build();
-            }
-            
-            // Parse serial numbers
-            List<String> serialNumbers = item.getSerialNumbers() != null 
-                    ? List.of(item.getSerialNumbers().split(","))
-                    : List.of();
-            
-            return com.doan.WEB_TMDT.module.inventory.dto.ExportOrderDetailResponse.ExportOrderItemInfo.builder()
-                    .id(item.getId())
-                    .sku(item.getSku())
-                    .quantity(item.getQuantity())
-                    .totalCost(item.getTotalCost())
-                    .serialNumbers(serialNumbers)
-                    .warehouseProduct(wpInfo)
-                    .build();
-        }).toList();
-        
+                    // Map warehouse product
+                    com.doan.WEB_TMDT.module.inventory.dto.ExportOrderDetailResponse.WarehouseProductInfo wpInfo = null;
+                    if (item.getWarehouseProduct() != null) {
+                        wpInfo = com.doan.WEB_TMDT.module.inventory.dto.ExportOrderDetailResponse.WarehouseProductInfo.builder()
+                                .id(item.getWarehouseProduct().getId())
+                                .sku(item.getWarehouseProduct().getSku())
+                                .internalName(item.getWarehouseProduct().getInternalName())
+                                .description(item.getWarehouseProduct().getDescription())
+                                .techSpecsJson(item.getWarehouseProduct().getTechSpecsJson())
+                                .build();
+                    }
+
+                    // Parse serial numbers
+                    List<String> serialNumbers = item.getSerialNumbers() != null
+                            ? List.of(item.getSerialNumbers().split(","))
+                            : List.of();
+
+                    return com.doan.WEB_TMDT.module.inventory.dto.ExportOrderDetailResponse.ExportOrderItemInfo.builder()
+                            .id(item.getId())
+                            .sku(item.getSku())
+                            .quantity(item.getQuantity())
+                            .totalCost(item.getTotalCost())
+                            .serialNumbers(serialNumbers)
+                            .warehouseProduct(wpInfo)
+                            .build();
+                }).toList();
+
         return com.doan.WEB_TMDT.module.inventory.dto.ExportOrderDetailResponse.builder()
                 .id(eo.getId())
                 .exportCode(eo.getExportCode())
@@ -529,14 +638,14 @@ public class InventoryServiceImpl implements InventoryService {
     public ApiResponse cancelPurchaseOrder(Long id) {
         PurchaseOrder po = purchaseOrderRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy phiếu nhập #" + id));
-        
+
         if (po.getStatus() != POStatus.CREATED) {
             return ApiResponse.error("Chỉ có thể hủy phiếu ở trạng thái chờ xử lý");
         }
-        
+
         po.setStatus(POStatus.CANCELLED);
         purchaseOrderRepository.save(po);
-        
+
         return ApiResponse.success("Đã hủy phiếu nhập thành công", po);
     }
 
@@ -545,57 +654,93 @@ public class InventoryServiceImpl implements InventoryService {
     public ApiResponse cancelExportOrder(Long id) {
         ExportOrder eo = exportOrderRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy phiếu xuất #" + id));
-        
+
         if (eo.getStatus() != ExportStatus.CREATED) {
             return ApiResponse.error("Chỉ có thể hủy phiếu ở trạng thái chờ xử lý");
         }
-        
+
         eo.setStatus(ExportStatus.CANCELLED);
         exportOrderRepository.save(eo);
-        
+
         return ApiResponse.success("Đã hủy phiếu xuất thành công", eo);
     }
 
+    // ✅ ĐÃ SỬA: Thêm tham số status và logic lọc + Tối ưu performance
     @Override
-    public ApiResponse getStocks() {
-        List<InventoryStock> stocks = inventoryStockRepository.findAll();
-        
-        // Map to DTO to include warehouse product info
-        List<Map<String, Object>> stockData = stocks.stream().map(stock -> {
-            Map<String, Object> data = new HashMap<>();
-            data.put("id", stock.getId());
-            data.put("onHand", stock.getOnHand());
-            data.put("reserved", stock.getReserved());
-            data.put("damaged", stock.getDamaged());
-            data.put("sellable", stock.getSellable());
-            data.put("available", stock.getAvailable());
-            
-            if (stock.getWarehouseProduct() != null) {
-                WarehouseProduct wp = stock.getWarehouseProduct();
-                Map<String, Object> productInfo = new HashMap<>();
-                productInfo.put("id", wp.getId());
-                productInfo.put("sku", wp.getSku());
-                productInfo.put("internalName", wp.getInternalName());
-                productInfo.put("description", wp.getDescription());
-                productInfo.put("techSpecsJson", wp.getTechSpecsJson());
-                productInfo.put("lastImportDate", wp.getLastImportDate());
-                
-                if (wp.getSupplier() != null) {
-                    Map<String, Object> supplierInfo = new HashMap<>();
-                    supplierInfo.put("id", wp.getSupplier().getId());
-                    supplierInfo.put("name", wp.getSupplier().getName());
-                    supplierInfo.put("taxCode", wp.getSupplier().getTaxCode());
-                    productInfo.put("supplier", supplierInfo);
-                }
-                
-                data.put("warehouseProduct", productInfo);
+    public ApiResponse getStocks(String status) {
+        try {
+            List<InventoryStock> stocks;
+
+            // Xử lý lọc
+            if ("low_stock".equals(status)) {
+                stocks = inventoryStockRepository.findLowStockItems(10L);
+            } else if ("out_of_stock".equals(status)) {
+                stocks = inventoryStockRepository.findAll().stream()
+                        .filter(s -> s.getOnHand() <= 0)
+                        .toList();
+            } else {
+                stocks = inventoryStockRepository.findAll();
             }
-            
-            return data;
-        }).toList();
-        
-        return ApiResponse.success("Danh sách tồn kho", stockData);
+
+            // Map sang DTO - CHỈ LẤY FIELD CẦN THIẾT
+            List<Map<String, Object>> stockData = stocks.stream().map(stock -> {
+                Map<String, Object> data = new HashMap<>();
+                data.put("id", stock.getId());
+                data.put("onHand", stock.getOnHand() != null ? stock.getOnHand() : 0L);
+                data.put("reserved", stock.getReserved() != null ? stock.getReserved() : 0L);
+                data.put("damaged", stock.getDamaged() != null ? stock.getDamaged() : 0L);
+                data.put("sellable", stock.getSellable());
+                data.put("available", stock.getAvailable());
+
+                // Chỉ lấy thông tin cơ bản của warehouse product (không load supplier, techSpecs)
+                if (stock.getWarehouseProduct() != null) {
+                    WarehouseProduct wp = stock.getWarehouseProduct();
+                    Map<String, Object> productInfo = new HashMap<>();
+                    productInfo.put("id", wp.getId());
+                    productInfo.put("sku", wp.getSku());
+                    productInfo.put("internalName", wp.getInternalName());
+                    // Không load description, techSpecsJson, supplier để tăng tốc
+                    data.put("warehouseProduct", productInfo);
+                }
+
+                return data;
+            }).toList();
+
+            return ApiResponse.success("Danh sách tồn kho", stockData);
+        } catch (Exception e) {
+            log.error("Error getting stocks: ", e);
+            return ApiResponse.error("Lỗi khi lấy danh sách tồn kho: " + e.getMessage());
+        }
     }
+
+    @Override
+    public ApiResponse getStockDetails(Long warehouseProductId) {
+        try {
+            // 1. Tìm sản phẩm kho
+            WarehouseProduct wp = warehouseProductRepository.findById(warehouseProductId)
+                    .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy sản phẩm #" + warehouseProductId));
+
+            // 2. Lấy danh sách serial từ bảng ProductDetail
+            // Chỉ lấy những cái đang còn trong kho (IN_STOCK) hoặc có thể cả cái đã bán (tùy bạn)
+            // Ở đây mình lấy tất cả để bạn dễ quản lý
+            List<ProductDetail> details = productDetailRepository.findAllByWarehouseProduct_Id(warehouseProductId);
+
+            // 3. Map sang DTO đơn giản để trả về Frontend
+            List<Map<String, Object>> serialList = details.stream().map(d -> {
+                Map<String, Object> map = new HashMap<>();
+                map.put("serialNumber", d.getSerialNumber());
+                map.put("status", d.getStatus()); // IN_STOCK, SOLD, etc.
+                map.put("importDate", d.getImportDate());
+                map.put("importPrice", d.getImportPrice());
+                return map;
+            }).toList();
+
+            return ApiResponse.success("Danh sách Serial", serialList);
+        } catch (Exception e) {
+            return ApiResponse.error("Lỗi lấy chi tiết serial: " + e.getMessage());
+        }
+    }
+
     @Override
     @Transactional
     public ApiResponse exportForSale(SaleExportRequest req) {
@@ -612,6 +757,7 @@ public class InventoryServiceImpl implements InventoryService {
                 .note(req.getNote())
                 .createdBy(req.getCreatedBy())
                 .exportDate(LocalDateTime.now())
+                .orderId(req.getOrderId())  // ✅ Link export order với order
                 .build();
 
         List<ExportOrderItem> orderItems = new ArrayList<>();
@@ -652,9 +798,22 @@ public class InventoryServiceImpl implements InventoryService {
                 totalCost += pd.getImportPrice();
             }
 
-            // Cập nhật tồn kho
+            // Cập nhật tồn kho: trừ onHand
             stock.setOnHand(stock.getOnHand() - exportCount);
+            
+            // ✅ Giải phóng reserved khi xuất kho (hàng đã ra khỏi kho, không cần giữ nữa)
+            Long currentReserved = stock.getReserved() != null ? stock.getReserved() : 0L;
+            Long newReserved = Math.max(0, currentReserved - exportCount);
+            stock.setReserved(newReserved);
+            
             inventoryStockRepository.save(stock);
+
+            // Đồng bộ với bảng Product (cả stock và reserved)
+            syncStockWithProduct(wp, stock.getOnHand());
+            syncReservedWithProduct(wp, newReserved);
+            
+            log.info("📦 Xuất kho SKU {}: onHand -{}, reserved {} -> {}", 
+                wp.getSku(), exportCount, currentReserved, newReserved);
 
             // Ghi dòng xuất kho
             ExportOrderItem exportItem = ExportOrderItem.builder()
@@ -672,7 +831,118 @@ public class InventoryServiceImpl implements InventoryService {
         exportOrder.setItems(orderItems);
         exportOrderRepository.save(exportOrder);
 
+        // ✅ Create GHN order after successful warehouse export
+        if (req.getOrderId() != null) {
+            try {
+                createGHNOrderForExport(req.getOrderId(), exportOrder);
+            } catch (Exception e) {
+                log.error("Failed to create GHN order for export {}: {}", exportOrder.getExportCode(), e.getMessage());
+                // Don't fail the export, just log the error
+                // Admin can manually create GHN order later
+            }
+        }
+
         return ApiResponse.success("Xuất kho bán hàng thành công", exportOrder.getExportCode());
+    }
+
+    private void createGHNOrderForExport(Long orderId, ExportOrder exportOrder) {
+        log.info("Creating GHN order for order ID: {}", orderId);
+
+        // Get order details
+        com.doan.WEB_TMDT.module.order.entity.Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+
+        // Check if already has GHN order
+        if (order.getGhnOrderCode() != null && !order.getGhnOrderCode().isEmpty()) {
+            log.warn(" Order {} already has GHN order code: {}", order.getOrderCode(), order.getGhnOrderCode());
+            return;
+        }
+
+        // Check if need GHN shipping (not free ship)
+        if (order.getShippingFee() == 0 || shippingService.isHanoiInnerCity(order.getProvince(), order.getDistrict())) {
+            log.info("ℹ Order {} uses internal shipping (no GHN), updating status to READY_TO_SHIP", order.getOrderCode());
+
+            //  Cập nhật status cho đơn nội thành / miễn phí ship
+            order.setStatus(com.doan.WEB_TMDT.module.order.entity.OrderStatus.READY_TO_SHIP);
+            order.setShippedAt(LocalDateTime.now());
+            orderRepository.save(order);
+
+            return;
+        }
+
+        // Build full address with ward name (not code) for display
+        String wardDisplay = (order.getWardName() != null && !order.getWardName().isEmpty())
+                ? order.getWardName()
+                : order.getWard(); // Fallback to ward code if name not available
+        String fullAddress = String.join(", ",
+                order.getAddress(),
+                wardDisplay != null ? wardDisplay : "",
+                order.getDistrict(),
+                order.getProvince()
+        ).replaceAll(", ,", ",").trim();
+
+        // Build GHN order request
+        com.doan.WEB_TMDT.module.shipping.dto.CreateGHNOrderRequest ghnRequest =
+                com.doan.WEB_TMDT.module.shipping.dto.CreateGHNOrderRequest.builder()
+                        .toName(order.getCustomer().getFullName())
+                        .toPhone(order.getCustomer().getPhone())
+                        .toAddress(fullAddress)
+                        .toWardCode(order.getWard()) // Ward code from order
+                        .toDistrictId(getDistrictIdForGHN(order.getProvince(), order.getDistrict()))
+                        .note(order.getNote())
+                        .codAmount("COD".equals(order.getPaymentMethod()) ? order.getTotal().intValue() : 0)
+                        .weight(1000) // Default 1kg
+                        .length(20)
+                        .width(20)
+                        .height(10)
+                        .serviceTypeId(2) // Standard service
+                        .paymentTypeId("COD".equals(order.getPaymentMethod()) ? 2 : 1) // 1=Shop trả, 2=Người nhận trả
+                        .items(buildGHNItemsFromOrder(order))
+                        .build();
+
+        // Call GHN API
+        com.doan.WEB_TMDT.module.shipping.dto.CreateGHNOrderResponse ghnResponse =
+                shippingService.createGHNOrder(ghnRequest);
+
+        // Update order with GHN info and change status to READY_TO_SHIP
+        order.setGhnOrderCode(ghnResponse.getOrderCode());
+        order.setGhnShippingStatus("created");
+        order.setGhnCreatedAt(LocalDateTime.now());
+        order.setGhnExpectedDeliveryTime(ghnResponse.getExpectedDeliveryTime());
+
+        // ✅ Update order status to READY_TO_SHIP (Đã xuất kho, đợi tài xế lấy hàng)
+        order.setStatus(com.doan.WEB_TMDT.module.order.entity.OrderStatus.READY_TO_SHIP);
+        order.setShippedAt(LocalDateTime.now());
+
+        orderRepository.save(order);
+
+        log.info("✅ GHN order created successfully!");
+        log.info("   - Order Code: {}", order.getOrderCode());
+        log.info("   - GHN Order Code: {}", ghnResponse.getOrderCode());
+        log.info("   - Order Status: {} → SHIPPING", order.getStatus());
+        log.info("   - Export Code: {}", exportOrder.getExportCode());
+    }
+
+    private Integer getDistrictIdForGHN(String province, String district) {
+        // Simple implementation - return default
+        // In production, you should call GHN API to get district ID
+        return 1485; // Default Hà Đông district
+    }
+
+    private List<com.doan.WEB_TMDT.module.shipping.dto.CreateGHNOrderRequest.GHNOrderItem> buildGHNItemsFromOrder(
+            com.doan.WEB_TMDT.module.order.entity.Order order) {
+        List<com.doan.WEB_TMDT.module.shipping.dto.CreateGHNOrderRequest.GHNOrderItem> items = new ArrayList<>();
+
+        for (com.doan.WEB_TMDT.module.order.entity.OrderItem item : order.getItems()) {
+            items.add(com.doan.WEB_TMDT.module.shipping.dto.CreateGHNOrderRequest.GHNOrderItem.builder()
+                    .name(item.getProductName())
+                    .code(item.getProduct().getSku())
+                    .quantity(item.getQuantity())
+                    .price(item.getPrice().intValue())
+                    .build());
+        }
+
+        return items;
     }
 
 
@@ -690,7 +960,7 @@ public class InventoryServiceImpl implements InventoryService {
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy serial cần bảo hành: " + serial));
 
         if (pd.getStatus() != ProductStatus.IN_STOCK &&
-            pd.getStatus() != ProductStatus.SOLD) {
+                pd.getStatus() != ProductStatus.SOLD) {
             return ApiResponse.error("Serial không thể xuất bảo hành");
         }
 
@@ -711,6 +981,9 @@ public class InventoryServiceImpl implements InventoryService {
         // Trừ kho
         stock.setOnHand(stock.getOnHand() - 1);
         inventoryStockRepository.save(stock);
+
+        // Đồng bộ với bảng Product
+        syncStockWithProduct(wp, stock.getOnHand());
 
         // Tạo phiếu xuất
         ExportOrder exportOrder = ExportOrder.builder()
@@ -736,5 +1009,55 @@ public class InventoryServiceImpl implements InventoryService {
         exportOrderItemRepository.save(item);
 
         return ApiResponse.success("Xuất kho bảo hành thành công", exportOrder.getExportCode());
+    }
+
+    /**
+     * Helper method: Đồng bộ tồn kho giữa InventoryStock và Product
+     * Gọi sau mỗi lần thay đổi tồn kho (nhập/xuất)
+     */
+    private void syncStockWithProduct(WarehouseProduct wp, Long newOnHand) {
+        if (wp.getProduct() != null) {
+            Product product = wp.getProduct();
+            product.setStockQuantity(newOnHand);
+            productRepository.save(product);
+            log.info("✅ Đồng bộ tồn kho: {} -> {}", product.getName(), newOnHand);
+        }
+    }
+
+    /**
+     * Helper method: Đồng bộ reserved quantity giữa InventoryStock và Product
+     * Gọi sau mỗi lần thay đổi reserved (tạo đơn, hủy đơn)
+     */
+    private void syncReservedWithProduct(WarehouseProduct wp, Long newReserved) {
+        if (wp.getProduct() != null) {
+            Product product = wp.getProduct();
+            product.setReservedQuantity(newReserved);
+            productRepository.save(product);
+        }
+    }
+
+    /**
+     * Public method: Đồng bộ reserved quantity - gọi từ OrderService
+     */
+    @Override
+    @Transactional
+    public void syncReservedQuantity(Long warehouseProductId, Long newReserved) {
+        WarehouseProduct wp = warehouseProductRepository.findById(warehouseProductId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy sản phẩm kho #" + warehouseProductId));
+
+        // Cập nhật InventoryStock
+        InventoryStock stock = inventoryStockRepository.findByWarehouseProduct_Id(warehouseProductId)
+                .orElse(InventoryStock.builder()
+                        .warehouseProduct(wp)
+                        .onHand(0L)
+                        .reserved(0L)
+                        .damaged(0L)
+                        .build());
+
+        stock.setReserved(newReserved);
+        inventoryStockRepository.save(stock);
+
+        // Đồng bộ với Product
+        syncReservedWithProduct(wp, newReserved);
     }
 }

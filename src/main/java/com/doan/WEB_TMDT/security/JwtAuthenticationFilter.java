@@ -109,6 +109,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Object position = claims.get("position");
                 if (position != null) {
                     authorities.add(new SimpleGrantedAuthority(position.toString()));
+                    // Add ROLE_EMPLOYEE for all employee positions
+                    authorities.add(new SimpleGrantedAuthority("EMPLOYEE"));
+                    authorities.add(new SimpleGrantedAuthority("ROLE_EMPLOYEE"));
                     System.out.println("✅ User position: " + position.toString());
                 } else {
                     System.out.println("⚠️ No position found in JWT claims");

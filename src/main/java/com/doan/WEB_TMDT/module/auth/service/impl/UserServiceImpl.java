@@ -98,6 +98,7 @@ public class UserServiceImpl implements UserService {
         String phone = null;
         String address = null;
         String position = null;
+        Long employeeId = null;
         
         if (user.getCustomer() != null) {
             fullName = user.getCustomer().getFullName();
@@ -107,6 +108,7 @@ public class UserServiceImpl implements UserService {
             fullName = user.getEmployee().getFullName();
             position = user.getEmployee().getPosition() != null ? 
                       user.getEmployee().getPosition().name() : null;
+            employeeId = user.getEmployee().getId();
         }
         
         LoginResponse response = new LoginResponse(
@@ -118,7 +120,8 @@ public class UserServiceImpl implements UserService {
                 address,
                 user.getRole().name(),
                 position,
-                user.getStatus().name()
+                user.getStatus().name(),
+                employeeId
         );
         
         return ApiResponse.success("Đăng nhập thành công!", response);
@@ -180,6 +183,7 @@ public class UserServiceImpl implements UserService {
 
         String fullName = null;
         String position = null;
+        Long employeeId = null;
         
         if (user.getCustomer() != null) {
             fullName = user.getCustomer().getFullName();
@@ -187,6 +191,7 @@ public class UserServiceImpl implements UserService {
             fullName = user.getEmployee().getFullName();
             position = user.getEmployee().getPosition() != null ? 
                       user.getEmployee().getPosition().name() : null;
+            employeeId = user.getEmployee().getId();
         }
 
         Map<String, Object> userData = new HashMap<>();
@@ -196,6 +201,7 @@ public class UserServiceImpl implements UserService {
         userData.put("role", user.getRole().name());
         userData.put("position", position);
         userData.put("status", user.getStatus().name());
+        userData.put("employeeId", employeeId);
 
         return ApiResponse.success("Lấy thông tin người dùng thành công", userData);
     }

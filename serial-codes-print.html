@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>In Mã Serial Sản Phẩm</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .controls {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        
+        .controls button {
+            padding: 10px 20px;
+            margin: 0 5px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background: #007bff;
+            color: white;
+            transition: background 0.3s;
+        }
+        
+        .controls button:hover {
+            background: #0056b3;
+        }
+        
+        .controls select {
+            padding: 8px 15px;
+            margin: 0 10px;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0;
+            margin-top: 20px;
+        }
+        
+        .product-card {
+            border: 2px dashed #999;
+            padding: 15px;
+            text-align: center;
+            background: white;
+            page-break-inside: avoid;
+            height: 50vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .product-name {
+            font-weight: bold;
+            font-size: 13px;
+            color: #333;
+            margin-bottom: 8px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #007bff;
+            line-height: 1.3;
+        }
+        
+        .serial-number {
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #666;
+            margin: 5px 0;
+            padding: 3px;
+            background: #f8f9fa;
+            border-radius: 3px;
+        }
+        
+        .qr-code {
+            margin: 8px auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .qr-code img {
+            max-width: 130px;
+            max-height: 130px;
+        }
+        
+        .barcode {
+            margin: 5px auto;
+        }
+        
+        .warranty-info {
+            font-size: 9px;
+            color: #666;
+            margin-top: 8px;
+            padding-top: 5px;
+            border-top: 1px solid #eee;
+            line-height: 1.4;
+        }
+        
+        @media print {
+            @page {
+                size: A4;
+                margin: 10mm;
+            }
+            
+            body {
+                background: white;
+                padding: 0;
+                margin: 0;
+            }
+            
+            .container {
+                box-shadow: none;
+                padding: 0;
+                max-width: 100%;
+            }
+            
+            .controls {
+                display: none;
+            }
+            
+            h1 {
+                display: none;
+            }
+            
+            .product-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 0;
+                page-break-after: always;
+            }
+            
+            .product-card {
+                border: 2px dashed #000;
+                padding: 10px;
+                height: calc(50vh - 10mm);
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                page-break-inside: avoid;
+            }
+            
+            .product-card:nth-child(4n) {
+                page-break-after: always;
+            }
+            
+            .product-name {
+                font-size: 12px;
+                margin-bottom: 5px;
+            }
+            
+            .serial-number {
+                font-size: 10px;
+                margin: 5px 0;
+            }
+            
+            .qr-code img {
+                width: 120px !important;
+                height: 120px !important;
+            }
+            
+            .barcode svg {
+                max-width: 180px !important;
+            }
+            
+            .warranty-info {
+                font-size: 8px;
+                margin-top: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏷️ In Mã Serial Sản Phẩm - Demo</h1>
+        
+        <div class="controls">
+            <label>Chọn loại mã: </label>
+            <select id="codeType" onchange="updateCodes()">
+                <option value="both">QR Code + Barcode</option>
+                <option value="qr">Chỉ QR Code</option>
+                <option value="barcode">Chỉ Barcode</option>
+            </select>
+            <button onclick="window.print()">🖨️ In Tất Cả</button>
+            <button onclick="generateCodes()">🔄 Tạo Lại Mã</button>
+        </div>
+        
+        <div class="product-grid" id="productGrid"></div>
+    </div>
+
+    <script>
+        const products = [
+            // LAPTOP DELL
+            { name: 'Laptop Dell XPS 13 9340', serial: 'DELL2024XPS9340A1B2C', category: 'Laptop' },
+            { name: 'Laptop Dell Inspiron 15 5530', serial: 'DELL2024INS5530D3E4F', category: 'Laptop' },
+            { name: 'Laptop Dell Latitude 14 7440', serial: 'DELL2024LAT7440G5H6I', category: 'Laptop' },
+            { name: 'Laptop Dell Vostro 15 3520', serial: 'DELL2024VOS3520J7K8L', category: 'Laptop' },
+            { name: 'Laptop Dell Precision 15 5570', serial: 'DELL2024PRE5570M9N0P', category: 'Laptop' },
+            
+            // LAPTOP ASUS
+            { name: 'Laptop Asus Zenbook 14', serial: 'ASUS2024ZEN14Q1W2E3R', category: 'Laptop' },
+            { name: 'Laptop Asus ROG Strix G15', serial: 'ASUS2024ROG15T4Y5U6I', category: 'Laptop' },
+            { name: 'Laptop Asus Vivobook 15', serial: 'ASUS2024VIV15O7P8A9S', category: 'Laptop' },
+            { name: 'Laptop Asus TUF Gaming F17', serial: 'ASUS2024TUF17D0F1G2H', category: 'Laptop' },
+            { name: 'Laptop Asus Zenbook 13', serial: 'ASUS2024ZEN13J3K4L5M', category: 'Laptop' },
+            
+            // LAPTOP LENOVO
+            { name: 'Laptop Lenovo IdeaPad 3 15', serial: 'LENO2024IDEA15N6B7V8', category: 'Laptop' },
+            { name: 'Laptop Lenovo Yoga Slim 7', serial: 'LENO2024YOGA14C9X0Z1', category: 'Laptop' },
+            { name: 'Laptop Lenovo ThinkPad X1', serial: 'LENO2024THKP16A2S3D4', category: 'Laptop' },
+            { name: 'Laptop Lenovo Legion 5 Pro', serial: 'LENO2024LEGI15F5G6H7', category: 'Laptop' },
+            { name: 'Laptop Lenovo IdeaPad Gaming', serial: 'LENO2024IDEA14J8K9L0', category: 'Laptop' },
+            
+            // IPHONE
+            { name: 'iPhone 15 Pro Max 256GB', serial: 'APPL2024IP15PM256GB1', category: 'Điện thoại' },
+            { name: 'iPhone 15 Pro 128GB', serial: 'APPL2024IP15PR128GB2', category: 'Điện thoại' },
+            { name: 'iPhone 14 Pro Max 512GB', serial: 'APPL2024IP14PM512GB3', category: 'Điện thoại' },
+            { name: 'iPhone 15 Plus 256GB', serial: 'APPL2024IP15PL256GB4', category: 'Điện thoại' },
+            { name: 'iPhone 14 Pro 128GB', serial: 'APPL2024IP14PR128GB5', category: 'Điện thoại' },
+            
+            // SAMSUNG
+            { name: 'Samsung Galaxy S24 Ultra 512GB', serial: 'SAMS2024S24UL512GB01', category: 'Điện thoại' },
+            { name: 'Samsung Galaxy S23 Plus 256GB', serial: 'SAMS2024S23PL256GB02', category: 'Điện thoại' },
+            { name: 'Samsung Galaxy S24 Plus 256GB', serial: 'SAMS2024S24PL256GB03', category: 'Điện thoại' },
+            { name: 'Samsung Galaxy A54 128GB', serial: 'SAMS2024A54-128GB-04', category: 'Điện thoại' },
+            { name: 'Samsung Galaxy S23 Ultra 512GB', serial: 'SAMS2024S23UL512GB05', category: 'Điện thoại' },
+            
+            // XIAOMI
+            { name: 'Xiaomi 13 Pro 256GB', serial: 'XIAO202413PRO256GB01', category: 'Điện thoại' },
+            { name: 'Xiaomi 13 128GB', serial: 'XIAO202413-128GB-002', category: 'Điện thoại' },
+            { name: 'Redmi Note 12 Pro 128GB', serial: 'XIAO2024REDMI12C64G3', category: 'Điện thoại' },
+            { name: 'Xiaomi 13 Ultra 512GB', serial: 'XIAO202413ULTRA512G', category: 'Điện thoại' },
+            { name: 'Redmi Note 13 Pro 64GB', serial: 'XIAO2024REDMINOT1364', category: 'Điện thoại' },
+            
+            // MÀN HÌNH LG
+            { name: 'Màn hình LG 27UP850W UHD', serial: 'LG202427UP850W-UHD01', category: 'Màn hình' },
+            { name: 'Màn hình LG 24GN650 FHD', serial: 'LG202424GN650-FHD-02', category: 'Màn hình' },
+            { name: 'Màn hình LG 32UN880 4K', serial: 'LG202432UN880-4K-003', category: 'Màn hình' },
+            { name: 'Màn hình LG 27GL850 QHD', serial: 'LG202427GL850-QHD-04', category: 'Màn hình' },
+            { name: 'Màn hình LG 34WN80C UltraWide', serial: 'LG202434WN80C-UW-05', category: 'Màn hình' },
+            
+            // APPLE WATCH
+            { name: 'Apple Watch Series 9 45mm', serial: 'APPL2024AWS9-45MM-01', category: 'Smartwatch' },
+            { name: 'Apple Watch Series 9 41mm', serial: 'APPL2024AWS9-41MM-02', category: 'Smartwatch' },
+            { name: 'Apple Watch SE 2 44mm', serial: 'APPL2024AWSE2-44MM3', category: 'Smartwatch' },
+            { name: 'Apple Watch Ultra 2 49mm', serial: 'APPL2024AWUL2-49MM', category: 'Smartwatch' },
+            { name: 'Apple Watch Series 9 45mm GPS', serial: 'APPL2024AWS9-45MM-5', category: 'Smartwatch' },
+        ];
+
+        function generateCodes() {
+            const grid = document.getElementById('productGrid');
+            const codeType = document.getElementById('codeType').value;
+            grid.innerHTML = '';
+
+            products.forEach((product, index) => {
+                const card = document.createElement('div');
+                card.className = 'product-card';
+                
+                let content = `
+                    <div class="product-name">${product.name}</div>
+                    <div class="serial-number">S/N: ${product.serial}</div>
+                `;
+                
+                if (codeType === 'both' || codeType === 'qr') {
+                    content += `<div class="qr-code" id="qr-${index}"></div>`;
+                }
+                
+                if (codeType === 'both' || codeType === 'barcode') {
+                    content += `<div class="barcode"><svg id="barcode-${index}"></svg></div>`;
+                }
+                
+                content += `
+                    <div class="warranty-info">
+                        📦 ${product.category} | 🛡️ Bảo hành 12 tháng<br>
+                        📞 Hotline: 1900-xxxx | 🌐 website.com
+                    </div>
+                `;
+                
+                card.innerHTML = content;
+                grid.appendChild(card);
+                
+                // Generate QR Code
+                if (codeType === 'both' || codeType === 'qr') {
+                    setTimeout(() => {
+                        const qrContainer = document.getElementById(`qr-${index}`);
+                        qrContainer.innerHTML = ''; // Clear previous
+                        new QRCode(qrContainer, {
+                            text: product.serial,
+                            width: 130,
+                            height: 130,
+                            colorDark: "#000000",
+                            colorLight: "#ffffff",
+                            correctLevel: QRCode.CorrectLevel.M
+                        });
+                    }, 100);
+                }
+                
+                // Generate Barcode
+                if (codeType === 'both' || codeType === 'barcode') {
+                    setTimeout(() => {
+                        try {
+                            JsBarcode(`#barcode-${index}`, product.serial, {
+                                format: "CODE128",
+                                width: 2,
+                                height: 60,
+                                displayValue: true,
+                                fontSize: 14,
+                                margin: 8,
+                                background: "#ffffff",
+                                lineColor: "#000000"
+                            });
+                        } catch (e) {
+                            console.error('Barcode error:', e);
+                        }
+                    }, 100);
+                }
+            });
+        }
+
+        function updateCodes() {
+            generateCodes();
+        }
+
+        // Generate codes on page load
+        window.onload = generateCodes;
+    </script>
+</body>
+</html>

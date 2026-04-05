@@ -64,7 +64,7 @@ public class Payment {
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
-        expiredAt = createdAt.plusMinutes(15); // Hết hạn sau 15 phút
+        expiredAt = createdAt.plusMinutes(1); // Hết hạn sau 15 phút
         if (status == null) {
             status = PaymentStatus.PENDING;
         }

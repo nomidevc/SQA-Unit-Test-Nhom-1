@@ -16,12 +16,6 @@ public class EmployeeRegistrationController {
     // Nhân viên gửi yêu cầu đăng ký
     @PostMapping("/apply")
     public ApiResponse registerEmployee(@RequestBody EmployeeRegistrationRequest req) {
-        System.out.println("=== CONTROLLER RECEIVED REQUEST ===");
-        System.out.println("Request: " + req);
-        System.out.println("Full Name: " + req.getFullName());
-        System.out.println("Email: " + req.getEmail());
-        System.out.println("Phone: " + req.getPhone());
-        System.out.println("Position: " + req.getPosition());
         
         ApiResponse response = registrationService.registerEmployee(
                 req.getFullName(),
@@ -32,7 +26,6 @@ public class EmployeeRegistrationController {
                 req.getNote()
         );
         
-        System.out.println("Response: " + response);
         return response;
     }
 

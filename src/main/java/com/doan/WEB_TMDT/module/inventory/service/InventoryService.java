@@ -8,6 +8,8 @@ import com.doan.WEB_TMDT.module.inventory.entity.ExportStatus;
 public interface InventoryService {
     ApiResponse getAllSuppliers();
     ApiResponse getOrCreateSupplier(CreateSupplierRequest req);
+    ApiResponse createWarehouseProduct(CreateWarehouseProductRequest req);
+    ApiResponse updateWarehouseProduct(Long id, CreateWarehouseProductRequest req);
     ApiResponse createPurchaseOrder(CreatePORequest req);
     ApiResponse completePurchaseOrder(CompletePORequest req);
     ApiResponse createExportOrder(CreateExportOrderRequest req);
@@ -17,7 +19,9 @@ public interface InventoryService {
     ApiResponse getExportOrderDetail(Long id);
     ApiResponse cancelPurchaseOrder(Long id);
     ApiResponse cancelExportOrder(Long id);
-    ApiResponse getStocks();
+    ApiResponse getStocks(String status);
+    ApiResponse getStockDetails(Long warehouseProductId);
     ApiResponse exportForSale(SaleExportRequest req);
     ApiResponse exportForWarranty(WarrantyExportRequest req);
+    void syncReservedQuantity(Long warehouseProductId, Long newReserved);
 }

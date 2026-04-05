@@ -10,8 +10,6 @@ import java.util.List;
 
 @Data
 public class SaleExportRequest {
-
-    @NotBlank
     private String createdBy;        // Nhân viên thao tác xuất kho
 
     @NotNull

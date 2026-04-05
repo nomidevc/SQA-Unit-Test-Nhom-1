@@ -39,11 +39,9 @@ public class AuthServiceImpl implements AuthService {
         
         // Kiểm tra trùng email hoặc SĐT
         if (userRepository.existsByEmail(request.getEmail())) {
-            System.out.println("ERROR: Email already exists");
             return ApiResponse.error("Email đã được sử dụng!");
         }
         if (customerRepository.existsByPhone(request.getPhone())) {
-            System.out.println("ERROR: Phone already exists");
             return ApiResponse.error("Số điện thoại đã tồn tại!");
         }
 

@@ -58,12 +58,24 @@ public class WebhookServiceImpl implements WebhookService {
         
         switch (ghnStatus) {
             case "ready_to_pick":
+                // Chờ lấy hàng - GHN đã nhận đơn
+                // Giữ nguyên READY_TO_SHIP (đã xuất kho, đợi tài xế)
+                if (order.getStatus() == OrderStatus.CONFIRMED) {
+                    order.setStatus(OrderStatus.READY_TO_SHIP);
+                    if (order.getShippedAt() == null) {
+                        order.setShippedAt(now);
+                    }
+                }
+                break;
+                
             case "picking":
-                // Chờ lấy hàng / Đang lấy hàng
-                // Giữ nguyên CONFIRMED
-                if (order.getStatus() == OrderStatus.PENDING_PAYMENT) {
-                    order.setStatus(OrderStatus.CONFIRMED);
-                    order.setConfirmedAt(now);
+                // Tài xế đang đến lấy hàng
+                // Vẫn giữ READY_TO_SHIP
+                if (order.getStatus() == OrderStatus.CONFIRMED) {
+                    order.setStatus(OrderStatus.READY_TO_SHIP);
+                    if (order.getShippedAt() == null) {
+                        order.setShippedAt(now);
+                    }
                 }
                 break;
                 
@@ -71,14 +83,16 @@ public class WebhookServiceImpl implements WebhookService {
             case "storing":
             case "transporting":
             case "sorting":
-                // Đã lấy hàng / Đang vận chuyển
-                // Chuyển sang SHIPPING nếu chưa
-                if (order.getStatus() == OrderStatus.CONFIRMED || 
+                // ✅ Tài xế đã lấy hàng / Đang vận chuyển
+                // Chuyển từ READY_TO_SHIP → SHIPPING
+                if (order.getStatus() == OrderStatus.READY_TO_SHIP || 
+                    order.getStatus() == OrderStatus.CONFIRMED || 
                     order.getStatus() == OrderStatus.PENDING_PAYMENT) {
                     order.setStatus(OrderStatus.SHIPPING);
                     if (order.getShippedAt() == null) {
                         order.setShippedAt(now);
                     }
+                    log.info("🚚 Order {} status changed: READY_TO_SHIP → SHIPPING (driver picked up)", order.getOrderCode());
                 }
                 break;
                 

@@ -74,7 +74,7 @@ export const translations = {
     howToOrder: 'Làm thế nào để đặt hàng?',
     howToOrderAnswer: 'Bạn có thể đặt hàng trực tiếp trên website hoặc gọi hotline 1900.2091 để được tư vấn.',
     deliveryTime: 'Thời gian giao hàng?',
-    deliveryTimeAnswer: 'Chúng tôi giao hàng miễn phí toàn quốc trong vòng 1-3 ngày làm việc.',
+    deliveryTimeAnswer: 'Chúng tôi giao hàng miễn phí toàn quốc trong vòng 5-7 ngày làm việc.',
     returnPolicy: 'Chính sách đổi trả?',
     returnPolicyAnswer: 'Bạn có thể đổi trả sản phẩm trong vòng 7 ngày nếu có lỗi từ nhà sản xuất.',
     warrantyPolicy: 'Bảo hành như thế nào?',

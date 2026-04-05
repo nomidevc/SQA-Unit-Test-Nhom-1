@@ -5,6 +5,7 @@ import com.doan.WEB_TMDT.common.util.SecurityUtils;
 import com.doan.WEB_TMDT.module.accounting.dto.CreatePaymentRequest;
 import com.doan.WEB_TMDT.module.accounting.dto.SupplierPayableResponse;
 import com.doan.WEB_TMDT.module.accounting.entity.*;
+import com.doan.WEB_TMDT.module.accounting.repository.FinancialTransactionRepository;
 import com.doan.WEB_TMDT.module.accounting.repository.SupplierPayableRepository;
 import com.doan.WEB_TMDT.module.accounting.repository.SupplierPaymentRepository;
 import com.doan.WEB_TMDT.module.accounting.service.SupplierPayableService;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -27,6 +29,7 @@ public class SupplierPayableServiceImpl implements SupplierPayableService {
 
     private final SupplierPayableRepository payableRepository;
     private final SupplierPaymentRepository paymentRepository;
+    private final FinancialTransactionRepository financialTransactionRepository;
 
     @Override
     @Transactional
@@ -195,14 +198,30 @@ public class SupplierPayableServiceImpl implements SupplierPayableService {
 
             paymentRepository.save(payment);
 
+            // Tạo Financial Transaction để tracking
+            String transactionCode = "TXN-PAY-" + System.currentTimeMillis();
+            FinancialTransaction transaction = FinancialTransaction.builder()
+                    .transactionCode(transactionCode)
+                    .type(TransactionType.EXPENSE) // Thanh toán NCC là chi phí
+                    .category(TransactionCategory.SUPPLIER_PAYMENT)
+                    .amount(request.getAmount().doubleValue())
+                    .transactionDate(request.getPaymentDate().atStartOfDay())
+                    .description("Thanh toán công nợ " + payable.getPayableCode() + 
+                               " cho NCC " + payable.getSupplier().getName())
+                    .supplierId(payable.getSupplier().getId())
+                    .createdBy(SecurityUtils.getCurrentUserEmail())
+                    .build();
+
+            financialTransactionRepository.save(transaction);
+
             // Cập nhật công nợ
             payable.setPaidAmount(payable.getPaidAmount().add(request.getAmount()));
             payable.setRemainingAmount(payable.getRemainingAmount().subtract(request.getAmount()));
             payable.updateStatus();
             payableRepository.save(payable);
 
-            log.info("Payment {} created for payable {} - Amount: {}", 
-                    paymentCode, payable.getPayableCode(), request.getAmount());
+            log.info("Payment {} created for payable {} - Amount: {}, Transaction: {}", 
+                    paymentCode, payable.getPayableCode(), request.getAmount(), transactionCode);
 
             return ApiResponse.success("Thanh toán thành công", toResponse(payable));
         } catch (Exception e) {

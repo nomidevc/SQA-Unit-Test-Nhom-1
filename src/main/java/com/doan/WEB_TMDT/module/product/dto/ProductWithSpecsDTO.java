@@ -17,7 +17,9 @@ public class ProductWithSpecsDTO {
     private String sku;
     private Double price;
     private String description;
-    private Long stockQuantity;
+    private Long stockQuantity;        // Tổng tồn kho (cho admin)
+    private Long reservedQuantity;     // Số lượng đang giữ (cho admin)
+    private Integer availableQuantity; // Số lượng khả dụng = stock - reserved (cho customer)
     private Long categoryId;
     private String categoryName;
     

@@ -38,6 +38,7 @@ public class ShippingServiceImpl implements ShippingService {
     private Integer pickDistrictId;
 
     private final RestTemplate restTemplate = new RestTemplate();
+    private final com.doan.WEB_TMDT.module.order.repository.OrderRepository orderRepository;
 
     // Danh sách quận nội thành Hà Nội (miễn phí ship)
     private static final List<String> HANOI_INNER_DISTRICTS = Arrays.asList(
@@ -449,6 +450,68 @@ public class ShippingServiceImpl implements ShippingService {
             return 1485;
         }
     }
+    
+    private String getWardCode(Integer districtId, String wardName) {
+        if (districtId == null || wardName == null || wardName.trim().isEmpty()) {
+            log.warn("⚠️ Cannot get ward code: districtId={}, wardName={}", districtId, wardName);
+            return null;
+        }
+        
+        log.info("🔍 Looking for ward: {} in district ID: {}", wardName, districtId);
+        
+        try {
+            String url = ghnApiUrl + "/master-data/ward";
+            
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("district_id", districtId);
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Token", ghnApiToken);
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = restTemplate.postForObject(url, entity, Map.class);
+            
+            log.info("Ward API response code: {}", response != null ? response.get("code") : "null");
+            
+            if (response != null && response.get("code") != null && response.get("code").equals(200)) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> wards = (List<Map<String, Object>>) response.get("data");
+                
+                if (wards != null && !wards.isEmpty()) {
+                    String normalizedInput = normalizeVietnamese(wardName);
+                    log.info("Normalized ward input: {}", normalizedInput);
+                    
+                    // First try exact match
+                    for (Map<String, Object> ward : wards) {
+                        String ghnName = (String) ward.get("WardName");
+                        
+                        if (matchLocation(ghnName, normalizedInput)) {
+                            String wardCode = (String) ward.get("WardCode");
+                            log.info("✅ Found ward: {} → Code: {}", ghnName, wardCode);
+                            return wardCode;
+                        }
+                    }
+                    
+                    // If no match found, return the first ward as fallback
+                    Map<String, Object> firstWard = wards.get(0);
+                    String wardCode = (String) firstWard.get("WardCode");
+                    log.warn("⚠️ Ward '{}' not found, using first ward: {} (code: {})", 
+                        wardName, firstWard.get("WardName"), wardCode);
+                    return wardCode;
+                } else {
+                    log.warn("⚠️ No wards found for district ID: {}", districtId);
+                }
+            }
+            
+        } catch (Exception e) {
+            log.error("❌ Error getting ward code: " + e.getMessage(), e);
+        }
+        
+        return null;
+    }
 
     @Override
     public CreateGHNOrderResponse createGHNOrder(CreateGHNOrderRequest request) {
@@ -465,9 +528,27 @@ public class ShippingServiceImpl implements ShippingService {
             body.put("to_name", request.getToName());
             body.put("to_phone", request.getToPhone());
             body.put("to_address", request.getToAddress());
-            body.put("to_ward_code", request.getToWardCode());
+            
+            // Get ward code - required by GHN
+            String wardCode = request.getToWardCode();
+            if (wardCode == null || wardCode.trim().isEmpty()) {
+                // Try to get ward code from district ID and address
+                // For now, get the first ward of the district as fallback
+                log.warn("⚠️ No ward code provided, attempting to get default ward for district: {}", request.getToDistrictId());
+                wardCode = getWardCode(request.getToDistrictId(), ""); // Empty string will get first ward
+            }
+            
+            if (wardCode != null && !wardCode.trim().isEmpty()) {
+                body.put("to_ward_code", wardCode);
+                log.info("✅ Using ward code: {}", wardCode);
+            } else {
+                log.error("❌ Cannot proceed without ward code!");
+                throw new RuntimeException("Không thể tạo đơn GHN: Thiếu mã phường/xã");
+            }
+            
             body.put("to_district_id", request.getToDistrictId());
             body.put("note", request.getNote());
+            body.put("required_note", "KHONGCHOXEMHANG"); // Required field by GHN API
             body.put("cod_amount", request.getCodAmount());
             body.put("weight", request.getWeight());
             body.put("length", request.getLength());
@@ -492,6 +573,7 @@ public class ShippingServiceImpl implements ShippingService {
             
             log.info("=== GHN Create Order API Request ===");
             log.info("URL: {}", url);
+            log.info("Headers: Token={}, ShopId={}", ghnApiToken.substring(0, 10) + "...", ghnShopId);
             log.info("Request body: {}", body);
             
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
@@ -500,30 +582,96 @@ public class ShippingServiceImpl implements ShippingService {
             Map<String, Object> response = restTemplate.postForObject(url, entity, Map.class);
             
             log.info("=== GHN Create Order API Response ===");
-            log.info("Response: {}", response);
+            log.info("Full Response: {}", response);
+            log.info("Response Code: {}", response != null ? response.get("code") : "null");
+            log.info("Response Message: {}", response != null ? response.get("message") : "null");
             
             if (response != null && response.get("code") != null && response.get("code").equals(200)) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> data = (Map<String, Object>) response.get("data");
                 
                 if (data != null) {
-                    String orderCode = (String) data.get("order_code");
-                    String sortCode = (String) data.get("sort_code");
-                    Double totalFee = data.get("total_fee") != null ? 
-                        ((Number) data.get("total_fee")).doubleValue() : null;
+                    log.info("📦 GHN Response Data Keys: {}", data.keySet());
+                    log.info("📦 GHN Response Data: {}", data);
                     
-                    // Parse expected delivery time if available
-                    LocalDateTime expectedDeliveryTime = null;
-                    if (data.get("expected_delivery_time") != null) {
-                        try {
-                            String timeStr = data.get("expected_delivery_time").toString();
-                            expectedDeliveryTime = LocalDateTime.parse(timeStr);
-                        } catch (Exception e) {
-                            log.warn("Could not parse expected_delivery_time: {}", e.getMessage());
-                        }
+                    // Parse order_code - REQUIRED field
+                    String orderCode = data.get("order_code") != null ? 
+                        data.get("order_code").toString() : null;
+                    
+                    if (orderCode == null) {
+                        log.error("❌ order_code is null in GHN response!");
+                        throw new RuntimeException("GHN không trả về mã đơn hàng");
                     }
                     
-                    log.info("GHN order created successfully: {}", orderCode);
+                    // Parse sort_code - may be null
+                    String sortCode = data.get("sort_code") != null ? 
+                        data.get("sort_code").toString() : null;
+                    
+                    // Parse total_fee - try multiple field names
+                    Double totalFee = null;
+                    Object feeValue = data.get("total_fee");
+                    if (feeValue == null) {
+                        feeValue = data.get("fee"); // Alternative field name
+                    }
+                    if (feeValue == null) {
+                        feeValue = data.get("service_fee"); // Another alternative
+                    }
+                    
+                    if (feeValue != null) {
+                        try {
+                            totalFee = ((Number) feeValue).doubleValue();
+                            log.info("✅ Parsed total_fee: {}", totalFee);
+                        } catch (Exception e) {
+                            log.warn("⚠️ Could not parse fee value '{}': {}", feeValue, e.getMessage());
+                        }
+                    } else {
+                        log.warn("⚠️ No fee field found in response. Available fields: {}", data.keySet());
+                    }
+                    
+                    // Parse expected_delivery_time - can be timestamp or ISO string
+                    LocalDateTime expectedDeliveryTime = null;
+                    Object timeValue = data.get("expected_delivery_time");
+                    
+                    if (timeValue != null) {
+                        try {
+                            if (timeValue instanceof Number) {
+                                // Unix timestamp
+                                long timestamp = ((Number) timeValue).longValue();
+                                expectedDeliveryTime = LocalDateTime.ofInstant(
+                                    Instant.ofEpochSecond(timestamp), 
+                                    ZoneId.systemDefault()
+                                );
+                            } else if (timeValue instanceof String) {
+                                String timeStr = timeValue.toString();
+                                // Try ISO format first
+                                try {
+                                    expectedDeliveryTime = LocalDateTime.parse(timeStr);
+                                } catch (Exception e1) {
+                                    // Try as timestamp string
+                                    try {
+                                        long timestamp = Long.parseLong(timeStr);
+                                        expectedDeliveryTime = LocalDateTime.ofInstant(
+                                            Instant.ofEpochSecond(timestamp), 
+                                            ZoneId.systemDefault()
+                                        );
+                                    } catch (Exception e2) {
+                                        log.warn("⚠️ Could not parse time string: {}", timeStr);
+                                    }
+                                }
+                            }
+                            log.info("✅ Parsed expected_delivery_time: {}", expectedDeliveryTime);
+                        } catch (Exception e) {
+                            log.warn("⚠️ Could not parse expected_delivery_time '{}': {}", timeValue, e.getMessage());
+                        }
+                    } else {
+                        log.warn("⚠️ expected_delivery_time is null in response");
+                    }
+                    
+                    log.info("✅ GHN order created successfully!");
+                    log.info("   - Order Code: {}", orderCode);
+                    log.info("   - Sort Code: {}", sortCode != null ? sortCode : "N/A");
+                    log.info("   - Total Fee: {}", totalFee != null ? totalFee : "N/A");
+                    log.info("   - Expected Delivery: {}", expectedDeliveryTime != null ? expectedDeliveryTime : "N/A");
                     
                     return CreateGHNOrderResponse.builder()
                             .orderCode(orderCode)
@@ -674,6 +822,211 @@ public class ShippingServiceImpl implements ShippingService {
             case "damage": return "Hàng bị hư hỏng";
             case "lost": return "Hàng bị thất lạc";
             default: return status;
+        }
+    }
+    
+    @Override
+    public List<Map<String, Object>> getProvinces() {
+        try {
+            String url = ghnApiUrl + "/master-data/province";
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Token", ghnApiToken);
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = restTemplate.postForObject(url, entity, Map.class);
+            
+            if (response != null && response.get("code") != null && response.get("code").equals(200)) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> provinces = (List<Map<String, Object>>) response.get("data");
+                
+                // Transform to simpler format
+                List<Map<String, Object>> result = new ArrayList<>();
+                for (Map<String, Object> province : provinces) {
+                    Map<String, Object> item = new HashMap<>();
+                    item.put("id", province.get("ProvinceID"));
+                    item.put("name", province.get("ProvinceName"));
+                    result.add(item);
+                }
+                
+                log.info("✅ Retrieved {} provinces", result.size());
+                return result;
+            }
+            
+            throw new RuntimeException("GHN API không trả về dữ liệu hợp lệ");
+            
+        } catch (Exception e) {
+            log.error("❌ Error getting provinces: " + e.getMessage(), e);
+            throw new RuntimeException("Không thể lấy danh sách tỉnh/thành phố: " + e.getMessage());
+        }
+    }
+    
+    @Override
+    public List<Map<String, Object>> getDistricts(Integer provinceId) {
+        try {
+            String url = ghnApiUrl + "/master-data/district";
+            
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("province_id", provinceId);
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Token", ghnApiToken);
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = restTemplate.postForObject(url, entity, Map.class);
+            
+            if (response != null && response.get("code") != null && response.get("code").equals(200)) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> districts = (List<Map<String, Object>>) response.get("data");
+                
+                // Transform to simpler format
+                List<Map<String, Object>> result = new ArrayList<>();
+                for (Map<String, Object> district : districts) {
+                    Map<String, Object> item = new HashMap<>();
+                    item.put("id", district.get("DistrictID"));
+                    item.put("name", district.get("DistrictName"));
+                    result.add(item);
+                }
+                
+                log.info("✅ Retrieved {} districts for province {}", result.size(), provinceId);
+                return result;
+            }
+            
+            throw new RuntimeException("GHN API không trả về dữ liệu hợp lệ");
+            
+        } catch (Exception e) {
+            log.error("❌ Error getting districts: " + e.getMessage(), e);
+            throw new RuntimeException("Không thể lấy danh sách quận/huyện: " + e.getMessage());
+        }
+    }
+    
+    @Override
+    public List<Map<String, Object>> getWards(Integer districtId) {
+        try {
+            String url = ghnApiUrl + "/master-data/ward";
+            
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("district_id", districtId);
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Token", ghnApiToken);
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = restTemplate.postForObject(url, entity, Map.class);
+            
+            if (response != null && response.get("code") != null && response.get("code").equals(200)) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> wards = (List<Map<String, Object>>) response.get("data");
+                
+                // Transform to simpler format
+                List<Map<String, Object>> result = new ArrayList<>();
+                for (Map<String, Object> ward : wards) {
+                    Map<String, Object> item = new HashMap<>();
+                    item.put("code", ward.get("WardCode"));
+                    item.put("name", ward.get("WardName"));
+                    result.add(item);
+                }
+                
+                log.info("✅ Retrieved {} wards for district {}", result.size(), districtId);
+                return result;
+            }
+            
+            throw new RuntimeException("GHN API không trả về dữ liệu hợp lệ");
+            
+        } catch (Exception e) {
+            log.error("❌ Error getting wards: " + e.getMessage(), e);
+            throw new RuntimeException("Không thể lấy danh sách phường/xã: " + e.getMessage());
+        }
+    }
+    
+    @Override
+    public Map<String, Object> fixAllWardNames() {
+        log.info("🔧 Starting to fix ward names for all orders...");
+        
+        int totalOrders = 0;
+        int successCount = 0;
+        int failCount = 0;
+        List<String> errors = new ArrayList<>();
+        
+        try {
+            // Lấy tất cả orders có ward nhưng chưa có wardName
+            List<com.doan.WEB_TMDT.module.order.entity.Order> orders = 
+                orderRepository.findAll().stream()
+                    .filter(o -> o.getWard() != null && !o.getWard().isEmpty())
+                    .filter(o -> o.getWardName() == null || o.getWardName().isEmpty())
+                    .toList();
+            
+            totalOrders = orders.size();
+            log.info("📊 Found {} orders need to fix ward name", totalOrders);
+            
+            for (com.doan.WEB_TMDT.module.order.entity.Order order : orders) {
+                try {
+                    // Get district ID
+                    Integer districtId = getDistrictId(order.getProvince(), order.getDistrict());
+                    
+                    // Get wards list
+                    List<Map<String, Object>> wards = getWards(districtId);
+                    
+                    // Find ward by code
+                    Optional<Map<String, Object>> wardOpt = wards.stream()
+                        .filter(w -> order.getWard().equals(w.get("code")))
+                        .findFirst();
+                    
+                    if (wardOpt.isPresent()) {
+                        String wardName = (String) wardOpt.get().get("name");
+                        order.setWardName(wardName);
+                        
+                        // Rebuild shippingAddress with correct ward name
+                        String newShippingAddress = String.format("%s, %s, %s, %s",
+                            order.getAddress(), wardName, 
+                            order.getDistrict(), order.getProvince());
+                        order.setShippingAddress(newShippingAddress);
+                        
+                        orderRepository.save(order);
+                        
+                        successCount++;
+                        log.info("✅ Updated order {} with ward name: {} and rebuilt address", 
+                            order.getOrderCode(), wardName);
+                    } else {
+                        failCount++;
+                        String error = "Order " + order.getOrderCode() + ": Ward code " + order.getWard() + " not found in district " + districtId;
+                        errors.add(error);
+                        log.warn("⚠️ {}", error);
+                    }
+                    
+                } catch (Exception e) {
+                    failCount++;
+                    String error = "Order " + order.getOrderCode() + ": " + e.getMessage();
+                    errors.add(error);
+                    log.error("❌ Error fixing order {}: {}", order.getOrderCode(), e.getMessage());
+                }
+            }
+            
+            log.info("🎉 Fix ward names completed!");
+            log.info("   Total: {}", totalOrders);
+            log.info("   Success: {}", successCount);
+            log.info("   Failed: {}", failCount);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("total", totalOrders);
+            result.put("success", successCount);
+            result.put("failed", failCount);
+            result.put("errors", errors);
+            
+            return result;
+            
+        } catch (Exception e) {
+            log.error("❌ Fatal error fixing ward names: {}", e.getMessage(), e);
+            throw new RuntimeException("Lỗi khi cập nhật tên phường/xã: " + e.getMessage());
         }
     }
 }

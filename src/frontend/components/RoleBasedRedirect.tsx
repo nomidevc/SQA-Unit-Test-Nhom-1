@@ -13,32 +13,10 @@ export default function RoleBasedRedirect() {
       return
     }
 
-    // Redirect based on role and position
+    // Redirect based on role
     if (user?.role === 'EMPLOYEE') {
-      // For employees, check position
-      switch (user?.position) {
-        case 'WAREHOUSE':
-          router.push('/warehouse')
-          break
-        case 'PRODUCT_MANAGER':
-          router.push('/product-manager')
-          break
-        case 'ACCOUNTANT':
-          router.push('/admin/accounting')
-          break
-        case 'SALES':
-        case 'SALE':
-          router.push('/sales')
-          break
-        case 'CSKH':
-          router.push('/admin')
-          break
-        case 'SHIPPER':
-          router.push('/shipper')
-          break
-        default:
-          router.push('/admin')
-      }
+      // All employees go to /employee (unified interface)
+      router.push('/employee')
     } else {
       // For non-employees, check role
       switch (user?.role) {

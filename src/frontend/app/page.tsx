@@ -154,9 +154,9 @@ export default function HomePage() {
                     className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden group"
                   >
                     <div className="relative aspect-square bg-gray-100">
-                      {product.images && product.images.length > 0 ? (
+                      {(product.imageUrl || (product.images && product.images.length > 0)) ? (
                         <img
-                          src={product.images[0].imageUrl}
+                          src={product.imageUrl || product.images?.[0]?.imageUrl}
                           alt={product.name}
                           className="w-full h-full object-cover"
                         />
@@ -185,7 +185,7 @@ export default function HomePage() {
                         <span className="text-red-600 font-bold">
                           {formatPrice(product.price || 0)}
                         </span>
-                        {product.stockQuantity > 0 ? (
+                        {(product.availableQuantity !== undefined ? product.availableQuantity : product.stockQuantity) > 0 ? (
                           <span className="text-xs text-green-600">Còn hàng</span>
                         ) : (
                           <span className="text-xs text-red-600">Hết hàng</span>

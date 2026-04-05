@@ -21,6 +21,23 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     List<Payment> findByStatusAndExpiredAtBefore(PaymentStatus status, LocalDateTime expiredAt);
     boolean existsByPaymentCode(String paymentCode);
     
+    // Query với fetch join để load order và items (tránh lazy loading issue)
+    @Query("SELECT p FROM Payment p " +
+           "JOIN FETCH p.order o " +
+           "LEFT JOIN FETCH o.items oi " +
+           "LEFT JOIN FETCH oi.product " +
+           "WHERE p.status = :status AND p.expiredAt < :expiredAt")
+    List<Payment> findExpiredPaymentsWithOrderItems(@Param("status") PaymentStatus status, 
+                                                     @Param("expiredAt") LocalDateTime expiredAt);
+    
+    // Query để lấy payment với order và items (cho checkPaymentStatus)
+    @Query("SELECT p FROM Payment p " +
+           "JOIN FETCH p.order o " +
+           "LEFT JOIN FETCH o.items oi " +
+           "LEFT JOIN FETCH oi.product " +
+           "WHERE p.paymentCode = :paymentCode")
+    Optional<Payment> findByPaymentCodeWithOrderItems(@Param("paymentCode") String paymentCode);
+    
     // Accounting queries
     List<Payment> findByPaidAtBetween(LocalDateTime startDate, LocalDateTime endDate);
     

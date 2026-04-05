@@ -25,15 +25,40 @@ export default function GHNTracking({ orderId, ghnOrderCode }: GHNTrackingProps)
     try {
       setLoading(true)
       setError(null)
+      
+      console.log('🚚 ===== LOADING GHN TRACKING =====')
+      console.log('Order ID:', orderId)
+      console.log('GHN Order Code:', ghnOrderCode)
+      
       const response = await orderApi.getShippingStatus(orderId)
       
+      console.log('📡 GHN Tracking API Response:', response)
+      
       if (response.success && response.data) {
-        setTrackingData(response.data)
+        const trackingData = response.data
+        setTrackingData(trackingData)
+        
+        console.log('✅ ===== GHN TRACKING DATA =====')
+        console.log('Order Code:', trackingData.orderCode)
+        console.log('Status:', trackingData.status)
+        console.log('Status Text:', trackingData.statusText)
+        console.log('Current Status:', trackingData.currentStatus)
+        console.log('Current Warehouse:', trackingData.currentWarehouse)
+        console.log('Expected Delivery Time:', trackingData.expectedDeliveryTime)
+        console.log('Updated Date:', trackingData.updatedDate)
+        console.log('COD Amount:', trackingData.codAmount)
+        console.log('Shipping Fee:', trackingData.shippingFee)
+        console.log('Note:', trackingData.note)
+        console.log('Logs:', trackingData.logs)
+        console.log('================================')
       } else {
+        console.warn('⚠️ GHN Tracking failed:', response.message)
         setError(response.message || 'Không thể tải thông tin vận chuyển')
       }
     } catch (err: any) {
-      console.error('Error loading tracking:', err)
+      console.error('❌ Error loading GHN tracking:', err)
+      console.error('Error response:', err.response?.data)
+      console.error('Error status:', err.response?.status)
       setError(err.response?.data?.message || 'Lỗi khi tải thông tin vận chuyển')
     } finally {
       setLoading(false)
@@ -81,7 +106,7 @@ export default function GHNTracking({ orderId, ghnOrderCode }: GHNTrackingProps)
           disabled={loading}
           className="text-sm text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
         >
-          {loading ? 'Đang tải...' : '🔄 Làm mới'}
+          {loading ? 'Đang tải...' : ' Làm mới'}
         </button>
       </div>
 
@@ -115,12 +140,12 @@ export default function GHNTracking({ orderId, ghnOrderCode }: GHNTrackingProps)
                 <p className="font-bold text-gray-900 text-lg">{trackingData.statusText || trackingData.currentStatus}</p>
                 {trackingData.currentWarehouse && (
                   <p className="text-sm text-gray-600 mt-1">
-                    📍 {trackingData.currentWarehouse}
+                     {trackingData.currentWarehouse}
                   </p>
                 )}
                 {trackingData.expectedDeliveryTime && (
                   <p className="text-sm text-gray-600 mt-1">
-                    ⏰ Dự kiến giao: {formatDate(trackingData.expectedDeliveryTime)}
+                    Dự kiến giao: {formatDate(trackingData.expectedDeliveryTime)}
                   </p>
                 )}
                 {trackingData.updatedDate && (

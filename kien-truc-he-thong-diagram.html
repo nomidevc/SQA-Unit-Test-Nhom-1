@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiến Trúc Hệ Thống - Sơ Đồ Đẹp</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 40px;
+            font-size: 32px;
+            font-weight: 700;
+        }
+
+        .architecture {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        .business-with-external {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 30px;
+            align-items: start;
+        }
+
+        .arrow-horizontal {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            color: #2c3e50;
+        }
+
+        .layer {
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .layer:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+
+        .layer-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .layer-content {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .component {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .modules-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+
+        .module {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        /* Colors for each layer */
+        .presentation-layer {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .business-layer {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .data-layer {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+
+        .external-layer {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            color: white;
+        }
+
+        .arrow {
+            text-align: center;
+            font-size: 40px;
+            color: #2c3e50;
+            margin: -10px 0;
+        }
+
+        .tech-stack {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .tech-item {
+            background: rgba(255,255,255,0.2);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .external-services {
+            display: flex;
+            justify-content: space-around;
+            gap: 20px;
+        }
+
+        .service-box {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+            flex: 1;
+        }
+
+        .service-icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+
+        .note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-top: 30px;
+            border-radius: 5px;
+            color: #856404;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            .container {
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏗️ KIẾN TRÚC HỆ THỐNG BÁN ĐỒ CÔNG NGHỆ</h1>
+        
+        <div class="architecture">
+            <!-- Presentation Layer -->
+            <div class="layer presentation-layer">
+                <div class="layer-title">📱 PRESENTATION LAYER</div>
+                <div class="layer-content">
+                    <div class="component">
+                        <div style="font-size: 20px; margin-bottom: 10px;">Next.js Frontend</div>
+                        <div style="font-size: 14px; opacity: 0.9;">Port 3000</div>
+                    </div>
+                    <div class="tech-stack">
+                        <span class="tech-item">React 18</span>
+                        <span class="tech-item">TypeScript</span>
+                        <span class="tech-item">TailwindCSS</span>
+                        <span class="tech-item">Zustand</span>
+                        <span class="tech-item">Axios</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="arrow">↓</div>
+            <div style="text-align: center; color: #7f8c8d; font-weight: 600;">REST API (HTTPS/JSON)</div>
+            <div class="arrow">↓</div>
+
+            <!-- Business Layer with External Services -->
+            <div class="business-with-external">
+                <!-- Business Layer -->
+                <div class="layer business-layer">
+                    <div class="layer-title">⚙️ BUSINESS LAYER</div>
+                    <div class="layer-content">
+                        <div class="component">
+                            <div style="font-size: 20px; margin-bottom: 10px;">Spring Boot Backend</div>
+                            <div style="font-size: 14px; opacity: 0.9;">Port 8080</div>
+                        </div>
+                        <div class="tech-stack">
+                            <span class="tech-item">Java 17</span>
+                            <span class="tech-item">Spring Security</span>
+                            <span class="tech-item">JWT</span>
+                            <span class="tech-item">JPA/Hibernate</span>
+                        </div>
+                        <div style="margin-top: 20px;">
+                            <div style="font-size: 16px; margin-bottom: 15px; font-weight: 700;">8 MODULES CHÍNH:</div>
+                            <div class="modules-grid">
+                                <div class="module">🔐 Auth</div>
+                                <div class="module">📦 Product</div>
+                                <div class="module">🛒 Order</div>
+                                <div class="module">💳 Payment</div>
+                                <div class="module">📊 Inventory</div>
+                                <div class="module">🚚 Shipping</div>
+                                <div class="module">🛍️ Cart</div>
+                                <div class="module">⭐ Review</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- External Services (bên cạnh Business Layer) -->
+                <div class="layer external-layer">
+                    <div class="layer-title">🌐 EXTERNAL</div>
+                    <div class="layer-content">
+                        <div style="text-align: center; font-size: 12px; margin-bottom: 15px; opacity: 0.9;">
+                            ⬅️ API Calls từ Service Layer
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 15px;">
+                            <div class="service-box">
+                                <div class="service-icon">💰</div>
+                                <div style="font-size: 16px; font-weight: 700; margin-bottom: 5px;">SePay</div>
+                                <div style="font-size: 11px; color: #555;">Payment</div>
+                            </div>
+                            <div class="service-box">
+                                <div class="service-icon">📦</div>
+                                <div style="font-size: 16px; font-weight: 700; margin-bottom: 5px;">GHN</div>
+                                <div style="font-size: 11px; color: #555;">Shipping</div>
+                            </div>
+                            <div class="service-box">
+                                <div class="service-icon">📧</div>
+                                <div style="font-size: 16px; font-weight: 700; margin-bottom: 5px;">Email</div>
+                                <div style="font-size: 11px; color: #555;">SMTP</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="arrow">↓</div>
+            <div style="text-align: center; color: #7f8c8d; font-weight: 600;">JPA/Hibernate (JDBC)</div>
+            <div class="arrow">↓</div>
+
+            <!-- Data Layer -->
+            <div class="layer data-layer">
+                <div class="layer-title">🗄️ DATA LAYER</div>
+                <div class="layer-content">
+                    <div class="component">
+                        <div style="font-size: 20px; margin-bottom: 10px;">MySQL Database</div>
+                        <div style="font-size: 14px; opacity: 0.9;">Port 3306</div>
+                    </div>
+                    <div class="tech-stack">
+                        <span class="tech-item">25+ Tables</span>
+                        <span class="tech-item">Relationships</span>
+                        <span class="tech-item">Indexes</span>
+                        <span class="tech-item">Transactions</span>
+                        <span class="tech-item">Constraints</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="note">
+            <strong>📌 Lưu ý:</strong> External Services được gọi từ <strong>Service Layer</strong> trong Business Layer, 
+            KHÔNG phải từ Data Layer. Ví dụ: PaymentService gọi SePay API, ShippingService gọi GHN API.
+        </div>
+    </div>
+
+    <script>
+        // Add animation on load
+        window.addEventListener('load', () => {
+            const layers = document.querySelectorAll('.layer');
+            layers.forEach((layer, index) => {
+                setTimeout(() => {
+                    layer.style.opacity = '0';
+                    layer.style.transform = 'translateY(20px)';
+                    layer.style.transition = 'all 0.5s ease';
+                    setTimeout(() => {
+                        layer.style.opacity = '1';
+                        layer.style.transform = 'translateY(0)';
+                    }, 50);
+                }, index * 200);
+            });
+        });
+    </script>
+</body>
+</html>

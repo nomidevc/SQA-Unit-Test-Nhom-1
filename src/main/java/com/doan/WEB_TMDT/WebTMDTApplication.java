@@ -1,5 +1,6 @@
 package com.doan.WEB_TMDT;
 
+import com.doan.WEB_TMDT.config.DotenvConfig;
 import com.doan.WEB_TMDT.module.auth.entity.Role;
 import com.doan.WEB_TMDT.module.auth.entity.Status;
 import com.doan.WEB_TMDT.module.auth.entity.User;
@@ -7,6 +8,7 @@ import com.doan.WEB_TMDT.module.auth.repository.UserRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -16,7 +18,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 public class WebTMDTApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(WebTMDTApplication.class, args);
+		new SpringApplicationBuilder(WebTMDTApplication.class)
+				.initializers(new DotenvConfig())
+				.run(args);
 	}
 
 	@Bean
@@ -30,9 +34,7 @@ public class WebTMDTApplication {
 						.status(Status.ACTIVE)
 						.build();
 				userRepository.save(admin);
-				System.out.println("Admin mặc định đã được tạo: admin@webtmdt.com / admin123");
 			} else {
-				System.out.println("Admin đã tồn tại, bỏ qua tạo mới.");
 			}
 		};
 	}

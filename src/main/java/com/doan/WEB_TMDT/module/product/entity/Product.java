@@ -54,5 +54,6 @@ public class Product {
     private WarehouseProduct warehouseProduct;
 
     @Column(name = "active")
-    private Boolean active = true;  // Trạng thái đang bán hay ngừng bán
+    @Builder.Default
+    private Boolean active = true;  // Trạng thái đang bán hay ngừng bán (mặc định là hiện)
 }

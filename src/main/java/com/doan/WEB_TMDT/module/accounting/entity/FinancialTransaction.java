@@ -2,47 +2,54 @@ package com.doan.WEB_TMDT.module.accounting.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "financial_transaction")
+@Table(name = "financial_transactions")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class FinancialTransaction {
+    
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
-    @Column(nullable = false)
+    
+    @Column(nullable = false, unique = true)
     private String transactionCode;
-
-    @Column(nullable = false)
-    private String orderId;
-
+    
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 20)
     private TransactionType type; // REVENUE, EXPENSE, REFUND
-
+    
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private TransactionCategory category; // SALES, SHIPPING, PAYMENT_FEE, TAX, SUPPLIER_PAYMENT, etc.
+    
     @Column(nullable = false)
-    private TransactionCategory category; // SALES, SHIPPING, PAYMENT_FEE, TAX, COST_OF_GOODS
-
-    @Column(nullable = false)
-    private BigDecimal amount;
-
+    private Double amount;
+    
+    private Long orderId; // Reference to order if applicable
+    
+    private Long supplierId; // Reference to supplier if applicable
+    
+    @Column(length = 1000)
     private String description;
-
+    
     @Column(nullable = false)
     private LocalDateTime transactionDate;
-
-    private String createdBy;
-
-    @Column(nullable = false)
+    
     private LocalDateTime createdAt;
-
-    private LocalDateTime updatedAt;
+    
+    private String createdBy;
+    
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        if (transactionCode == null) {
+            transactionCode = "TXN" + System.currentTimeMillis();
+        }
+    }
 }

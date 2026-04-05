@@ -467,6 +467,25 @@ export const orderApi = {
       throw new Error(error.response?.data?.message || 'Lỗi khi lấy thông tin vận chuyển')
     }
   },
+
+  cancelOrder: async (orderId: string | number, reason?: string): Promise<ApiResponse<any>> => {
+    try {
+      const params = reason ? { reason } : {}
+      const response = await apiClient.put(`/orders/${orderId}/cancel`, null, { params })
+      return response.data
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Lỗi khi hủy đơn hàng')
+    }
+  },
+
+  confirmReceived: async (orderId: string | number): Promise<ApiResponse<any>> => {
+    try {
+      const response = await apiClient.put(`/orders/${orderId}/confirm-received`)
+      return response.data
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Lỗi khi xác nhận nhận hàng')
+    }
+  },
 }
 
 // Admin Order API
@@ -481,6 +500,30 @@ export const adminOrderApi = {
       }
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Lỗi khi tải đơn hàng')
+    }
+  },
+
+  getById: async (orderId: number): Promise<ApiResponse<any>> => {
+    try {
+      const response = await apiClient.get(`/admin/orders/${orderId}`)
+      return {
+        success: true,
+        data: response.data?.data || response.data,
+      }
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Lỗi khi lấy thông tin đơn hàng')
+    }
+  },
+
+  getShippingStatus: async (orderId: number): Promise<ApiResponse<any>> => {
+    try {
+      const response = await apiClient.get(`/admin/orders/${orderId}/shipping-status`)
+      return {
+        success: true,
+        data: response.data?.data || response.data,
+      }
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Lỗi khi lấy thông tin vận chuyển')
     }
   },
 
@@ -504,18 +547,23 @@ export const adminOrderApi = {
     }
   },
 
-  markAsShipping: async (orderId: number): Promise<ApiResponse<any>> => {
+  // DEPRECATED: Không dùng nữa - chỉ shipper mới được cập nhật trạng thái giao hàng
+  // markAsShipping và markAsDelivered đã được chuyển sang ShipperAssignment API
+
+  markAsDelivered: async (orderId: number): Promise<ApiResponse<any>> => {
     try {
-      const response = await apiClient.put(`/admin/orders/${orderId}/shipping`)
+      const response = await apiClient.put(`/admin/orders/${orderId}/delivered`)
       return response.data
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Lỗi khi cập nhật trạng thái')
     }
   },
 
-  markAsDelivered: async (orderId: number): Promise<ApiResponse<any>> => {
+  // Cập nhật từ READY_TO_SHIP sang SHIPPING (CHỈ endpoint này được dùng)
+  // Không cho phép cập nhật từ CONFIRMED hoặc các trạng thái khác
+  markShippingFromReady: async (orderId: number): Promise<ApiResponse<any>> => {
     try {
-      const response = await apiClient.put(`/admin/orders/${orderId}/delivered`)
+      const response = await apiClient.put(`/admin/orders/${orderId}/mark-shipping-from-ready`)
       return response.data
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Lỗi khi cập nhật trạng thái')
@@ -552,6 +600,34 @@ export const customerApi = {
       return response.data
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Lỗi khi cập nhật thông tin')
+    }
+  },
+
+  // Lấy danh sách tất cả khách hàng (cho nhân viên/admin)
+  getAll: async (): Promise<ApiResponse<any[]>> => {
+    try {
+      const response = await apiClient.get('/customer/all')
+      return response.data
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        error: error.message,
+      }
+    }
+  },
+
+  // Lấy đơn hàng của 1 khách hàng (cho nhân viên/admin)
+  getOrdersByCustomerId: async (customerId: number): Promise<ApiResponse<any[]>> => {
+    try {
+      const response = await apiClient.get(`/orders/customer/${customerId}`)
+      return response.data
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        error: error.message,
+      }
     }
   },
 }
@@ -743,6 +819,258 @@ export const cartApi = {
       return response.data
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Lỗi khi xóa giỏ hàng')
+    }
+  },
+}
+
+// Review API
+export const reviewApi = {
+  // Tạo đánh giá mới hoặc comment
+  create: async (data: {
+    productId: number
+    orderId?: number | null
+    rating?: number | null
+    comment: string
+  }): Promise<ApiResponse<any>> => {
+    try {
+      const response = await apiClient.post('/reviews', data)
+      return response.data
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Lỗi khi tạo đánh giá')
+    }
+  },
+
+  // Tạo đánh giá mới (legacy - giữ để tương thích)
+  createReview: async (data: {
+    productId: number
+    orderId: number
+    rating: number
+    comment?: string
+  }): Promise<ApiResponse<any>> => {
+    try {
+      const response = await apiClient.post('/reviews', data)
+      return response.data
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Lỗi khi tạo đánh giá')
+    }
+  },
+
+  // Lấy đánh giá theo sản phẩm
+  getByProduct: async (productId: number): Promise<ApiResponse<any[]>> => {
+    try {
+      const response = await apiClient.get(`/reviews/product/${productId}`)
+      return response.data
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        error: error.message,
+      }
+    }
+  },
+
+  // Lấy thống kê đánh giá sản phẩm
+  getProductSummary: async (productId: number): Promise<ApiResponse<any>> => {
+    try {
+      const response = await apiClient.get(`/reviews/product/${productId}/summary`)
+      return response.data
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        error: error.message,
+      }
+    }
+  },
+
+  // Lấy đánh giá của khách hàng
+  getMyReviews: async (): Promise<ApiResponse<any[]>> => {
+    try {
+      const response = await apiClient.get('/reviews/my-reviews')
+      return response.data
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        error: error.message,
+      }
+    }
+  },
+
+  // Kiểm tra có thể đánh giá không
+  checkCanReview: async (orderId: number, productId: number): Promise<ApiResponse<any>> => {
+    try {
+      const response = await apiClient.get('/reviews/can-review', {
+        params: { orderId, productId }
+      })
+      return response.data
+    } catch (error: any) {
+      return {
+        success: false,
+        data: { canReview: false },
+        error: error.message,
+      }
+    }
+  },
+
+  // Admin xóa review/comment
+  delete: async (reviewId: number): Promise<ApiResponse<any>> => {
+    try {
+      const response = await apiClient.delete(`/reviews/${reviewId}`)
+      return response.data
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        error: error.response?.data?.message || 'Lỗi khi xóa bình luận',
+      }
+    }
+  },
+}
+
+// Shipper Assignment API
+export const shipperApi = {
+  // Lấy danh sách đơn hàng có thể nhận
+  getAvailableOrders: async (): Promise<ApiResponse<any[]>> => {
+    try {
+      const response = await apiClient.get('/shipper-assignments/available')
+      return response.data
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        error: error.message,
+      }
+    }
+  },
+
+  // Shipper nhận đơn
+  claimOrder: async (orderId: number, shipperId: number): Promise<ApiResponse<any>> => {
+    try {
+      const response = await apiClient.post('/shipper-assignments/claim', null, {
+        params: { orderId, shipperId }
+      })
+      return response.data
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Lỗi khi nhận đơn')
+    }
+  },
+
+  // Lấy danh sách đơn đã nhận của shipper
+  getMyOrders: async (shipperId: number): Promise<ApiResponse<any[]>> => {
+    try {
+      const response = await apiClient.get('/shipper-assignments/my-orders', {
+        params: { shipperId }
+      })
+      return response.data
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        error: error.message,
+      }
+    }
+  },
+
+  // Lấy danh sách đơn đang giao của shipper
+  getMyActiveOrders: async (shipperId: number): Promise<ApiResponse<any[]>> => {
+    try {
+      const response = await apiClient.get('/shipper-assignments/my-active-orders', {
+        params: { shipperId }
+      })
+      return response.data
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        error: error.message,
+      }
+    }
+  },
+
+  // Shipper bắt đầu giao hàng (đã lấy hàng từ kho)
+  startDelivery: async (assignmentId: number, shipperId: number): Promise<ApiResponse<any>> => {
+    try {
+      const response = await apiClient.put(`/shipper-assignments/${assignmentId}/start-delivery`, null, {
+        params: { shipperId }
+      })
+      return response.data
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Lỗi khi bắt đầu giao hàng')
+    }
+  },
+
+  // Shipper xác nhận giao thành công
+  confirmDelivery: async (assignmentId: number, shipperId: number): Promise<ApiResponse<any>> => {
+    try {
+      const response = await apiClient.put(`/shipper-assignments/${assignmentId}/deliver`, null, {
+        params: { shipperId }
+      })
+      return response.data
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Lỗi khi xác nhận giao hàng')
+    }
+  },
+
+  // Shipper báo giao thất bại
+  reportFailure: async (assignmentId: number, shipperId: number, reason: string): Promise<ApiResponse<any>> => {
+    try {
+      const response = await apiClient.put(`/shipper-assignments/${assignmentId}/fail`, null, {
+        params: { shipperId, reason }
+      })
+      return response.data
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Lỗi khi báo thất bại')
+    }
+  },
+
+  // Shipper hủy nhận đơn
+  cancelClaim: async (assignmentId: number, shipperId: number): Promise<ApiResponse<any>> => {
+    try {
+      const response = await apiClient.put(`/shipper-assignments/${assignmentId}/cancel`, null, {
+        params: { shipperId }
+      })
+      return response.data
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Lỗi khi hủy nhận đơn')
+    }
+  },
+
+  // Lấy chi tiết assignment
+  getAssignmentDetail: async (assignmentId: number): Promise<ApiResponse<any>> => {
+    try {
+      const response = await apiClient.get(`/shipper-assignments/${assignmentId}`)
+      return response.data
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Lỗi khi lấy chi tiết')
+    }
+  },
+
+  // Lấy tất cả assignments (cho admin/nhân viên xem)
+  getAllAssignments: async (): Promise<ApiResponse<any[]>> => {
+    try {
+      const response = await apiClient.get('/shipper-assignments/all')
+      return response.data
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        error: error.message,
+      }
+    }
+  },
+
+  // Lấy assignment theo orderId
+  getAssignmentByOrder: async (orderId: number): Promise<ApiResponse<any>> => {
+    try {
+      const response = await apiClient.get(`/shipper-assignments/by-order/${orderId}`)
+      return response.data
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        error: error.message,
+      }
     }
   },
 }

@@ -22,27 +22,17 @@ export default function Footer() {
   ]
 
   const supportLinks = [
-    { name: 'Chính sách và hướng dẫn mua hàng trả góp', href: '/support/installment' },
-    { name: 'Hướng dẫn mua hàng và chính sách vận chuyển', href: '/support/shipping' },
     { name: 'Chính sách đổi mới và bảo hành', href: '/support/warranty' },
     { name: 'Dịch vụ bảo hành mở rộng', href: '/support/extended-warranty' },
-    { name: 'Chính sách bảo mật', href: '/support/privacy' },
-    { name: 'Chính sách giải quyết khiếu nại', href: '/support/complaints' },
     { name: 'Quy chế hoạt động', href: '/support/rules' },
-    { name: 'Chương trình Hoàng Hà Edu', href: '/support/education' },
-    { name: 'Quy định về hoá đơn GTGT', href: '/support/invoice' },
+    { name: 'Chương trình TechWorld Edu', href: '/support/education' },
   ]
 
   const companyLinks = [
-    { name: 'Giới thiệu về Hoàng Hà Mobile', href: '/about' },
-    { name: 'Thông tin các trang TMĐT', href: '/about/ecommerce' },
+    { name: 'Giới thiệu về TechWorld', href: '/about' },
     { name: 'Chăm sóc khách hàng', href: '/support/customer-care' },
-    { name: 'Dịch vụ sửa chữa Hoàng Hà Care', href: '/support/repair' },
-    { name: 'Khách hàng doanh nghiệp (B2B)', href: '/support/b2b' },
-    { name: 'Tuyển dụng', href: '/careers' },
-    { name: 'Tra cứu đơn hàng', href: '/orders' },
+    { name: 'Dịch vụ sửa chữa TechWorld Care', href: '/support/repair' },
     { name: 'Tra cứu bảo hành', href: '/warranty-check' },
-    { name: 'Tìm siêu thị (125 cửa hàng)', href: '/stores' },
   ]
 
   return (
@@ -62,7 +52,7 @@ export default function Footer() {
             <div className="space-y-2 text-sm text-gray-300">
               <div className="flex items-center space-x-2">
                 <FaMapMarkerAlt size={14} />
-                <span>Số 89 Đường Tam Trinh, Phường Vĩnh Tuy, Hà Nội</span>
+                <span>96A Đ. Trần Phú, P. Mộ Lao, Hà Đông, Hà Nội</span>
               </div>
               <div className="flex items-center space-x-2">
                 <FaPhone size={14} />
@@ -126,18 +116,10 @@ export default function Footer() {
 
         {/* Features */}
         <div className="border-t border-gray-700 mt-8 pt-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="text-center">
               <div className="text-2xl font-bold text-navy-400 mb-2">Tốt hơn về giá</div>
               <p className="text-sm text-gray-300">Thành viên - HSSV Ưu đãi riêng tới 5%</p>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-navy-400 mb-2">Thu cũ đổi mới</div>
-              <p className="text-sm text-gray-300">Thu cũ giá cao, trợ giá lên đời</p>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-navy-400 mb-2">Thanh toán - Trả góp</div>
-              <p className="text-sm text-gray-300">Dễ dàng</p>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-navy-400 mb-2">Trả máy lỗi</div>
@@ -166,7 +148,7 @@ export default function Footer() {
       <div className="bg-gray-800 py-4">
         <div className="container mx-auto px-4">
           <div className="text-center text-sm text-gray-300">
-            <p>{t('copyright')} © 2024. {t('allRightsReserved')}</p>
+            <p>{t('copyright')} © 2025. {t('allRightsReserved')}</p>
           </div>
         </div>
       </div>

@@ -10,6 +10,7 @@ import java.util.Optional;
 public interface ProductDetailRepository extends JpaRepository<ProductDetail, Long> {
     boolean existsBySerialNumber(String serialNumber);
     Optional<ProductDetail> findBySerialNumber(String serialNumber);
+    List<ProductDetail> findAllByWarehouseProduct_Id(Long warehouseProductId);
     List<ProductDetail> findByStatus(ProductStatus status);
     List<ProductDetail> findByWarehouseProduct_SkuAndStatus(String sku, ProductStatus status);
 }

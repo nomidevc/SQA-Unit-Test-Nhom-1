@@ -55,17 +55,28 @@ public class SecurityConfig {
                         .requestMatchers("/api/products/filter-by-specs").permitAll()
                         .requestMatchers("/api/product/**").permitAll()
                         
-                        // Public shipping endpoint (for calculating shipping fee)
+                        // Public review endpoints (anyone can view reviews)
+                        .requestMatchers("/api/reviews/product/**").permitAll()
+                        
+                        // Public shipping endpoints (for calculating shipping fee and address selection)
                         .requestMatchers("/api/shipping/calculate-fee").permitAll()
+                        .requestMatchers("/api/shipping/provinces").permitAll()
+                        .requestMatchers("/api/shipping/districts/**").permitAll()
+                        .requestMatchers("/api/shipping/wards/**").permitAll()
                         
                         // Customer endpoints (Cart, Orders, Profile)
                         .requestMatchers("/api/cart/**").hasAnyAuthority("CUSTOMER", "ADMIN")
-                        .requestMatchers("/api/orders/**").hasAnyAuthority("CUSTOMER", "ADMIN", "EMPLOYEE", "SALE", "SALES", "SHIPPER")
+                        .requestMatchers("/api/customer/all").hasAnyAuthority("ADMIN", "EMPLOYEE", "SALE", "SALES", "SHIPPER", "WAREHOUSE", "PRODUCT_MANAGER", "ACCOUNTANT", "CSKH")
                         .requestMatchers("/api/customer/**").hasAnyAuthority("CUSTOMER", "ADMIN")
+                        .requestMatchers("/api/orders/customer/**").hasAnyAuthority("ADMIN", "EMPLOYEE", "SALE", "SALES", "SHIPPER", "WAREHOUSE", "PRODUCT_MANAGER", "ACCOUNTANT", "CSKH")
+                        .requestMatchers("/api/orders/**").hasAnyAuthority("CUSTOMER", "ADMIN", "EMPLOYEE", "SALE", "SALES", "SHIPPER", "WAREHOUSE", "PRODUCT_MANAGER", "ACCOUNTANT", "CSKH")
                         
                         // Warehouse endpoints (Inventory management)
                         // Note: /api/inventory/stock cho phép PRODUCT_MANAGER xem (read-only)
-                        .requestMatchers("/api/inventory/stock").hasAnyAuthority("WAREHOUSE", "PRODUCT_MANAGER", "ADMIN")
+                        .requestMatchers("/api/inventory/stock").hasAnyAuthority("WAREHOUSE", "PRODUCT_MANAGER", "ADMIN", "EMPLOYEE", "SALE", "ACCOUNTANT", "CSKH", "SHIPPER")
+                        .requestMatchers("/api/inventory/suppliers").hasAnyAuthority("WAREHOUSE", "PRODUCT_MANAGER", "ADMIN", "EMPLOYEE", "SALE", "ACCOUNTANT", "CSKH", "SHIPPER")
+                        .requestMatchers("/api/inventory/export-orders/**").hasAnyAuthority("WAREHOUSE", "ADMIN", "EMPLOYEE", "SALE", "SALES", "PRODUCT_MANAGER", "ACCOUNTANT", "CSKH", "SHIPPER")
+                        .requestMatchers("/api/inventory/purchase-orders/**").hasAnyAuthority("WAREHOUSE", "ADMIN", "EMPLOYEE", "SALE", "SALES", "PRODUCT_MANAGER", "ACCOUNTANT", "CSKH", "SHIPPER")
                         .requestMatchers("/api/inventory/**").hasAnyAuthority("WAREHOUSE", "ADMIN")
                         
                         // Product Manager endpoints (Product & Category management)
@@ -78,6 +89,9 @@ public class SecurityConfig {
                         
                         // Admin order management (ADMIN + SALES_STAFF + SHIPPER)
                         .requestMatchers("/api/admin/orders/**").hasAnyAuthority("ADMIN", "SALE", "SALES", "EMPLOYEE", "SHIPPER")
+                        
+                        // Dashboard endpoints (ADMIN + All Employee Positions)
+                        .requestMatchers("/api/dashboard/**").hasAnyAuthority("ADMIN", "EMPLOYEE", "ACCOUNTANT", "SALE", "SALES", "WAREHOUSE", "PRODUCT_MANAGER", "CSKH", "SHIPPER")
                         
                         // Accounting endpoints (ADMIN + ACCOUNTANT)
                         .requestMatchers("/api/accounting/**").hasAnyAuthority("ADMIN", "ACCOUNTANT")
@@ -95,7 +109,6 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // ✅ Swagger bypass hoàn toàn
     @Bean
     public org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer webSecurityCustomizer() {
         return (web) -> web.ignoring().requestMatchers(

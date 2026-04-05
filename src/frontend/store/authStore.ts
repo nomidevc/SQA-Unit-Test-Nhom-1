@@ -17,6 +17,7 @@ export interface User {
   role: 'CUSTOMER' | 'ADMIN' | 'EMPLOYEE'
   position?: 'WAREHOUSE' | 'PRODUCT_MANAGER' | 'ACCOUNTANT' | 'SALE' | 'SALES' | 'CSKH' | 'SHIPPER'
   status?: string
+  employeeId?: number // ID của employee (nếu là nhân viên)
   customer?: {
     fullName?: string
     phone?: string
@@ -24,10 +25,19 @@ export interface User {
     gender?: string
     birthDate?: string
   }
+  employee?: {
+    id?: number // ID của employee trong bảng employees
+    fullName?: string
+    phone?: string
+    address?: string
+    position?: 'WAREHOUSE' | 'PRODUCT_MANAGER' | 'ACCOUNTANT' | 'SALE' | 'SALES' | 'CSKH' | 'SHIPPER'
+    firstLogin?: boolean
+  }
 }
 
 interface AuthStore {
   user: User | null
+  employee: User['employee'] | null
   token: string | null
   isAuthenticated: boolean
   login: (user: User) => void
@@ -40,9 +50,18 @@ export const useAuthStore = create<AuthStore>()(
   persist(
     (set: any) => ({
       user: null,
+      employee: null,
       token: null,
       isAuthenticated: false,
-      login: (user: User) => set({ user, isAuthenticated: true }),
+      login: (user: User) => set({ 
+        user, 
+        employee: user.employee || (user.employeeId ? { 
+          id: user.employeeId, 
+          fullName: user.fullName, 
+          position: user.position 
+        } : null),
+        isAuthenticated: true 
+      }),
       logout: () => {
         if (typeof window !== 'undefined') {
           localStorage.removeItem('auth_token')
@@ -51,9 +70,17 @@ export const useAuthStore = create<AuthStore>()(
           // Xóa giỏ hàng khi đăng xuất
           localStorage.removeItem('cart-storage')
         }
-        set({ user: null, isAuthenticated: false, token: null })
+        set({ user: null, employee: null, isAuthenticated: false, token: null })
       },
-      setUser: (user: User | null) => set({ user, isAuthenticated: !!user }),
+      setUser: (user: User | null) => set({ 
+        user, 
+        employee: user?.employee || (user?.employeeId ? { 
+          id: user.employeeId, 
+          fullName: user.fullName, 
+          position: user.position 
+        } : null),
+        isAuthenticated: !!user 
+      }),
       setAuth: (user: User, token: string) => {
         if (typeof window !== 'undefined') {
           // Xóa giỏ hàng cũ khi đăng nhập tài khoản mới
@@ -66,7 +93,20 @@ export const useAuthStore = create<AuthStore>()(
           localStorage.setItem('auth_token', token)
           localStorage.setItem('token', token)
         }
-        set({ user, token, isAuthenticated: true })
+        
+        // Đảm bảo employee.id được set đúng
+        const employeeData = user.employee || (user.employeeId ? { 
+          id: user.employeeId, 
+          fullName: user.fullName, 
+          position: user.position 
+        } : null)
+        
+        set({ 
+          user, 
+          employee: employeeData,
+          token, 
+          isAuthenticated: true 
+        })
       },
     }),
     {

@@ -29,9 +29,7 @@ public class GHNApiClient {
     @Value("${ghn.shop.id}")
     private Integer ghnShopId;
     
-    /**
-     * Tính phí ship qua GHN API
-     */
+
     public Map<String, Object> calculateShippingFee(
             Integer toDistrictId,
             String toWardCode,
@@ -99,9 +97,7 @@ public class GHNApiClient {
         }
     }
     
-    /**
-     * Lấy service type khả dụng cho địa chỉ
-     */
+
     private Integer getAvailableServiceType(Integer toDistrictId) {
         try {
             String url = ghnApiUrl + "/v2/shipping-order/available-services";

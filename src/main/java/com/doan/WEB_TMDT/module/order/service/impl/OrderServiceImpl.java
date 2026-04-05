@@ -15,8 +15,15 @@ import com.doan.WEB_TMDT.module.order.entity.OrderStatus;
 import com.doan.WEB_TMDT.module.order.entity.PaymentStatus;
 import com.doan.WEB_TMDT.module.order.repository.OrderRepository;
 import com.doan.WEB_TMDT.module.order.service.OrderService;
+import com.doan.WEB_TMDT.module.payment.repository.PaymentRepository;
 import com.doan.WEB_TMDT.module.product.entity.Product;
 import com.doan.WEB_TMDT.module.accounting.listener.OrderStatusChangedEvent;
+import com.doan.WEB_TMDT.module.product.repository.ProductImageRepository;
+import com.doan.WEB_TMDT.module.product.repository.ProductRepository;
+import com.doan.WEB_TMDT.module.shipping.dto.CalculateShippingFeeRequest;
+import com.doan.WEB_TMDT.module.shipping.dto.CreateGHNOrderRequest;
+import com.doan.WEB_TMDT.module.shipping.dto.GHNOrderDetailResponse;
+import com.doan.WEB_TMDT.module.shipping.service.ShippingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -39,10 +46,13 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final CartRepository cartRepository;
     private final CustomerRepository customerRepository;
-    private final com.doan.WEB_TMDT.module.payment.service.PaymentService paymentService;
-    private final com.doan.WEB_TMDT.module.shipping.service.ShippingService shippingService;
-    private final com.doan.WEB_TMDT.module.product.repository.ProductImageRepository productImageRepository;
+    private final PaymentRepository paymentRepository;
+    private final ShippingService shippingService;
+    private final ProductImageRepository productImageRepository;
+    private final ProductRepository productRepository;
+    private final com.doan.WEB_TMDT.module.inventory.service.InventoryService inventoryService;
     private final ApplicationEventPublisher eventPublisher;
+    private final com.doan.WEB_TMDT.module.order.repository.ShipperAssignmentRepository shipperAssignmentRepository;
 
     @Override
     public Long getCustomerIdByEmail(String email) {
@@ -83,17 +93,46 @@ public class OrderServiceImpl implements OrderService {
             return ApiResponse.error("Giỏ hàng trống");
         }
 
-        // 3. Validate stock for all items
-        for (CartItem cartItem : cart.getItems()) {
-            Product product = cartItem.getProduct();
-            if (product.getStockQuantity() == null || 
-                product.getStockQuantity() < cartItem.getQuantity()) {
-                return ApiResponse.error("Sản phẩm " + product.getName() + " không đủ số lượng");
+        // 2.1 Lọc các item đã chọn (nếu có selectedItemIds)
+        List<CartItem> selectedCartItems;
+        if (request.getSelectedItemIds() != null && !request.getSelectedItemIds().isEmpty()) {
+            selectedCartItems = cart.getItems().stream()
+                    .filter(item -> request.getSelectedItemIds().contains(item.getId()))
+                    .collect(java.util.stream.Collectors.toList());
+            
+            if (selectedCartItems.isEmpty()) {
+                return ApiResponse.error("Không tìm thấy sản phẩm đã chọn trong giỏ hàng");
             }
+        } else {
+            // Nếu không có selectedItemIds thì lấy tất cả
+            selectedCartItems = new ArrayList<>(cart.getItems());
         }
 
-        // 4. Calculate totals
-        Double subtotal = cart.getItems().stream()
+        // 3. Validate stock for selected items WITH LOCK để tránh race condition
+        // Khi 100 người đặt cùng lúc, chỉ 1 người được xử lý tại 1 thời điểm
+        for (CartItem cartItem : selectedCartItems) {
+            // Lấy product với lock - các request khác phải đợi
+            Product product = productRepository.findByIdWithLock(cartItem.getProduct().getId())
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy sản phẩm"));
+            
+            // Tính số lượng có thể bán = tồn kho - đã giữ
+            Long availableQty = (product.getStockQuantity() != null ? product.getStockQuantity() : 0L)
+                    - (product.getReservedQuantity() != null ? product.getReservedQuantity() : 0L);
+            
+            if (availableQty < cartItem.getQuantity()) {
+                if (availableQty <= 0) {
+                    return ApiResponse.error("Rất tiếc, sản phẩm " + product.getName() + " đã hết hàng");
+                } else {
+                    return ApiResponse.error("Sản phẩm " + product.getName() + " chỉ còn " + availableQty + " sản phẩm, vui lòng giảm số lượng");
+                }
+            }
+            
+            // Cập nhật lại cartItem với product đã lock
+            cartItem.setProduct(product);
+        }
+
+        // 4. Calculate totals (chỉ tính các item đã chọn)
+        Double subtotal = selectedCartItems.stream()
                 .mapToDouble(item -> item.getPrice() * item.getQuantity())
                 .sum();
         Double shippingFee = request.getShippingFee();
@@ -102,8 +141,12 @@ public class OrderServiceImpl implements OrderService {
 
         // 5. Create order
         String orderCode = generateOrderCode();
+        // Build full address with proper order: address, ward name, district, province
+        String wardDisplay = request.getWardName() != null && !request.getWardName().isEmpty() 
+                ? request.getWardName() 
+                : request.getWard(); // Fallback to ward code if name not available
         String fullAddress = String.format("%s, %s, %s, %s",
-                request.getAddress(), request.getWard(), 
+                request.getAddress(), wardDisplay, 
                 request.getDistrict(), request.getProvince());
 
         // Xác định status dựa trên payment method
@@ -123,6 +166,11 @@ public class OrderServiceImpl implements OrderService {
                 .orderCode(orderCode)
                 .customer(customer)
                 .shippingAddress(fullAddress)
+                .province(request.getProvince())
+                .district(request.getDistrict())
+                .ward(request.getWard())
+                .wardName(request.getWardName())
+                .address(request.getAddress())
                 .note(request.getNote())
                 .subtotal(subtotal)
                 .shippingFee(shippingFee)
@@ -138,15 +186,21 @@ public class OrderServiceImpl implements OrderService {
         // Note: stockQuantity không thay đổi ở đây
         // Chỉ khi xuất kho (warehouse export) thì mới trừ stockQuantity
         List<OrderItem> orderItems = new ArrayList<>();
-        for (CartItem cartItem : cart.getItems()) {
+        for (CartItem cartItem : selectedCartItems) {
             Product product = cartItem.getProduct();
             
             // Reserve stock (giữ hàng để không bán cho người khác)
             Long currentReserved = product.getReservedQuantity() != null ? product.getReservedQuantity() : 0L;
-            product.setReservedQuantity(currentReserved + cartItem.getQuantity());
+            Long newReserved = currentReserved + cartItem.getQuantity();
+            product.setReservedQuantity(newReserved);
+            
+            // Đồng bộ reserved với InventoryStock
+            if (product.getWarehouseProduct() != null) {
+                inventoryService.syncReservedQuantity(product.getWarehouseProduct().getId(), newReserved);
+            }
             
             log.info("Product {} reserved: {} -> {} (ordered: {})", 
-                product.getName(), currentReserved, currentReserved + cartItem.getQuantity(), cartItem.getQuantity());
+                product.getName(), currentReserved, newReserved, cartItem.getQuantity());
             
             OrderItem orderItem = OrderItem.builder()
                     .order(order)
@@ -166,54 +220,22 @@ public class OrderServiceImpl implements OrderService {
         // 7. Save order
         Order savedOrder = orderRepository.save(order);
 
-        // 8. Create GHN order (if not free ship)
-        if (shippingFee > 0 && !shippingService.isHanoiInnerCity(request.getProvince(), request.getDistrict())) {
-            try {
-                log.info("Creating GHN order for {}", orderCode);
-                
-                // Build GHN order request
-                com.doan.WEB_TMDT.module.shipping.dto.CreateGHNOrderRequest ghnRequest = 
-                    com.doan.WEB_TMDT.module.shipping.dto.CreateGHNOrderRequest.builder()
-                        .toName(customer.getFullName())
-                        .toPhone(customer.getPhone())
-                        .toAddress(fullAddress)
-                        .toWardCode("") // Ward code - optional for now
-                        .toDistrictId(getDistrictIdForGHN(request.getProvince(), request.getDistrict()))
-                        .note(request.getNote())
-                        .codAmount("COD".equals(request.getPaymentMethod()) ? total.intValue() : 0)
-                        .weight(1000) // Default 1kg
-                        .length(20)
-                        .width(20)
-                        .height(10)
-                        .serviceTypeId(2) // Standard service
-                        .paymentTypeId("COD".equals(request.getPaymentMethod()) ? 2 : 1) // 1=Shop trả, 2=Người nhận trả
-                        .items(buildGHNItems(savedOrder))
-                        .build();
-                
-                com.doan.WEB_TMDT.module.shipping.dto.CreateGHNOrderResponse ghnResponse = 
-                    shippingService.createGHNOrder(ghnRequest);
-                
-                // Update order with GHN info
-                savedOrder.setGhnOrderCode(ghnResponse.getOrderCode());
-                savedOrder.setGhnShippingStatus("created");
-                savedOrder.setGhnCreatedAt(LocalDateTime.now());
-                savedOrder.setGhnExpectedDeliveryTime(ghnResponse.getExpectedDeliveryTime());
-                orderRepository.save(savedOrder);
-                
-                log.info("✅ GHN order created: {}", ghnResponse.getOrderCode());
-                
-            } catch (Exception e) {
-                log.error("❌ Failed to create GHN order for {}: {}", orderCode, e.getMessage());
-                // Don't fail the whole order, just log the error
-                // Admin can manually create GHN order later
-            }
-        }
 
-        // 9. Clear cart
-        cart.clearItems();
+        
+        // Note: GHN order creation moved to warehouse export process
+        // When warehouse staff:
+        // 1. Creates export slip
+        // 2. Assigns serial numbers
+        // 3. Confirms export → Then call GHN API
+
+        // 9. Chỉ xóa các item đã mua, giữ lại các item khác trong giỏ hàng
+        for (CartItem cartItem : selectedCartItems) {
+            cart.getItems().remove(cartItem);
+        }
         cartRepository.save(cart);
 
-        log.info("Created order {} for customer {}", orderCode, customerId);
+        log.info("Created order {} for customer {} with {} items (removed from cart)", 
+                orderCode, customerId, selectedCartItems.size());
 
         // 10. Return response
         OrderResponse response = toOrderResponse(savedOrder);
@@ -250,31 +272,22 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public ApiResponse getMyOrders(Long customerId) {
-        log.info("========== GET MY ORDERS ==========");
-        log.info("Getting orders for customerId: {}", customerId);
-        
+
         List<Order> orders = orderRepository.findByCustomerId(customerId);
-        log.info("Found {} orders for customerId: {}", orders.size(), customerId);
-        
+
         // Log order details
         orders.forEach(order -> {
-            log.info("Order: id={}, code={}, customerId={}", 
-                order.getId(), order.getOrderCode(), order.getCustomer().getId());
         });
         
         List<OrderResponse> responses = orders.stream()
                 .map(this::toOrderResponse)
                 .collect(Collectors.toList());
-        
-        log.info("Returning {} order responses", responses.size());
-        log.info("========== END GET MY ORDERS ==========");
-        
         return ApiResponse.success("Danh sách đơn hàng", responses);
     }
 
     @Override
     @Transactional
-    public ApiResponse cancelOrderByCustomer(Long orderId, Long customerId, String reason) {
+    public ApiResponse  cancelOrderByCustomer(Long orderId, Long customerId, String reason) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng"));
 
@@ -300,14 +313,22 @@ public class OrderServiceImpl implements OrderService {
             for (OrderItem item : order.getItems()) {
                 Product product = item.getProduct();
                 Long currentReserved = product.getReservedQuantity() != null ? product.getReservedQuantity() : 0L;
-                product.setReservedQuantity(Math.max(0, currentReserved - item.getQuantity()));
+                Long newReserved = Math.max(0, currentReserved - item.getQuantity());
+                product.setReservedQuantity(newReserved);
+                
+                // Đồng bộ reserved với InventoryStock
+                if (product.getWarehouseProduct() != null) {
+                    inventoryService.syncReservedQuantity(product.getWarehouseProduct().getId(), newReserved);
+                }
             }
             
             // Xóa payment trước (nếu có) để tránh foreign key constraint
             if (order.getPaymentId() != null) {
                 try {
-                    paymentService.deletePaymentByOrderId(order.getId());
-                    log.info("Deleted payment for order {}", order.getOrderCode());
+                    paymentRepository.findByOrderId(order.getId()).ifPresent(payment -> {
+                        paymentRepository.delete(payment);
+                        log.info("Deleted payment for order {}", order.getOrderCode());
+                    });
                 } catch (Exception e) {
                     log.warn("Could not delete payment for order {}: {}", order.getOrderCode(), e.getMessage());
                 }
@@ -327,19 +348,34 @@ public class OrderServiceImpl implements OrderService {
         }
 
         // Restore stock for cancelled order
+        // Logic khác nhau tùy theo trạng thái:
+        // - CONFIRMED: Hàng đang được giữ (reserved) → Trả lại reserved quantity
+        // - READY_TO_SHIP, SHIPPING: Hàng đã xuất kho → KHÔNG tự động cộng lại kho (cần nhập kho thủ công sau)
+        boolean isExported = (order.getStatus() == OrderStatus.READY_TO_SHIP || 
+                             order.getStatus() == OrderStatus.SHIPPING);
+        
         for (OrderItem item : order.getItems()) {
             Product product = item.getProduct();
-            Long currentStock = product.getStockQuantity();
-            Long restoredStock = currentStock + item.getQuantity();
-            product.setStockQuantity(restoredStock);
             
-            // Update reserved quantity
-            Long currentReserved = product.getReservedQuantity() != null ? product.getReservedQuantity() : 0L;
-            Long newReserved = Math.max(0, currentReserved - item.getQuantity());
-            product.setReservedQuantity(newReserved);
-            
-            log.info("Restored stock for product {}: {} -> {} (returned: {})", 
-                product.getName(), currentStock, restoredStock, item.getQuantity());
+            if (isExported) {
+                // Đơn đã xuất kho → KHÔNG tự động cộng lại kho
+                // Hàng cần được nhập lại kho thủ công sau này
+                log.info("Order {} cancelled after export - product {} needs manual re-import to warehouse", 
+                    order.getOrderCode(), product.getName());
+            } else {
+                // Đơn đang giữ hàng (CONFIRMED) → Chỉ trừ reserved quantity
+                Long currentReserved = product.getReservedQuantity() != null ? product.getReservedQuantity() : 0L;
+                Long newReserved = Math.max(0, currentReserved - item.getQuantity());
+                product.setReservedQuantity(newReserved);
+                
+                // Đồng bộ reserved với InventoryStock
+                if (product.getWarehouseProduct() != null) {
+                    inventoryService.syncReservedQuantity(product.getWarehouseProduct().getId(), newReserved);
+                }
+                
+                log.info("Released reserved quantity for product {} (CONFIRMED cancelled): {} -> {} (released: {})", 
+                    product.getName(), currentReserved, newReserved, item.getQuantity());
+            }
         }
 
         // Cancel order (chuyển status sang CANCELLED)
@@ -373,7 +409,7 @@ public class OrderServiceImpl implements OrderService {
 
         try {
             // Get GHN order detail
-            com.doan.WEB_TMDT.module.shipping.dto.GHNOrderDetailResponse ghnDetail = 
+            GHNOrderDetailResponse ghnDetail =
                 shippingService.getGHNOrderDetail(order.getGhnOrderCode());
             
             // Update order status from GHN
@@ -388,6 +424,35 @@ public class OrderServiceImpl implements OrderService {
             log.error("Error getting shipping status for order {}: {}", orderId, e.getMessage());
             return ApiResponse.error("Không thể lấy thông tin vận chuyển: " + e.getMessage());
         }
+    }
+
+    @Override
+    @Transactional
+    public ApiResponse confirmReceived(Long orderId, Long customerId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng"));
+        
+        // Kiểm tra đơn hàng thuộc về customer này
+        if (!order.getCustomer().getId().equals(customerId)) {
+            return ApiResponse.error("Bạn không có quyền thao tác với đơn hàng này");
+        }
+        
+        // Chỉ cho phép xác nhận khi đơn ở trạng thái DELIVERED
+        if (order.getStatus() != OrderStatus.DELIVERED) {
+            return ApiResponse.error("Chỉ có thể xác nhận nhận hàng khi đơn ở trạng thái 'Đã giao'");
+        }
+        
+        OrderStatus oldStatus = order.getStatus();
+        order.setStatus(OrderStatus.COMPLETED);
+        order.setCompletedAt(LocalDateTime.now());
+        orderRepository.save(order);
+        
+        // Publish event for accounting
+        publishOrderStatusChangeEvent(order, oldStatus, OrderStatus.COMPLETED);
+        
+        log.info("Customer {} confirmed received order {}", customerId, order.getOrderCode());
+        
+        return ApiResponse.success("Đã xác nhận nhận hàng thành công", toOrderResponse(order));
     }
 
     // Helper methods
@@ -412,6 +477,26 @@ public class OrderServiceImpl implements OrderService {
 
         Customer customer = order.getCustomer();
         
+        // Lấy thông tin shipper nếu có
+        Long shipperId = null;
+        String shipperName = null;
+        String shipperPhone = null;
+        
+        try {
+            var assignmentOpt = shipperAssignmentRepository.findByOrderId(order.getId());
+            if (assignmentOpt.isPresent()) {
+                var assignment = assignmentOpt.get();
+                var shipper = assignment.getShipper();
+                if (shipper != null) {
+                    shipperId = shipper.getId();
+                    shipperName = shipper.getFullName();
+                    shipperPhone = shipper.getPhone();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch shipper info for order {}: {}", order.getId(), e.getMessage());
+        }
+        
         return OrderResponse.builder()
                 .orderId(order.getId())
                 .orderCode(order.getOrderCode())
@@ -423,6 +508,11 @@ public class OrderServiceImpl implements OrderService {
                 .customerPhone(customer.getPhone())
                 .customerEmail(customer.getUser().getEmail())
                 .shippingAddress(order.getShippingAddress())
+                .province(order.getProvince())
+                .district(order.getDistrict())
+                .ward(order.getWard())
+                .wardName(order.getWardName())
+                .address(order.getAddress())
                 .note(order.getNote())
                 .items(items)
                 .subtotal(order.getSubtotal())
@@ -433,12 +523,16 @@ public class OrderServiceImpl implements OrderService {
                 .confirmedAt(order.getConfirmedAt())
                 .shippedAt(order.getShippedAt())
                 .deliveredAt(order.getDeliveredAt())
+                .completedAt(order.getCompletedAt())
                 .cancelledAt(order.getCancelledAt())
                 .cancelReason(order.getCancelReason())
                 .ghnOrderCode(order.getGhnOrderCode())
                 .ghnShippingStatus(order.getGhnShippingStatus())
                 .ghnCreatedAt(order.getGhnCreatedAt())
                 .ghnExpectedDeliveryTime(order.getGhnExpectedDeliveryTime())
+                .shipperId(shipperId)
+                .shipperName(shipperName)
+                .shipperPhone(shipperPhone)
                 .build();
     }
 
@@ -519,6 +613,7 @@ public class OrderServiceImpl implements OrderService {
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng"));
 
         try {
+            OrderStatus oldStatus = order.getStatus();
             OrderStatus newStatus = OrderStatus.valueOf(status.toUpperCase());
             order.setStatus(newStatus);
             
@@ -548,6 +643,10 @@ public class OrderServiceImpl implements OrderService {
             }
             
             orderRepository.save(order);
+            
+            // Publish event for accounting automation
+            publishOrderStatusChangeEvent(order, oldStatus, newStatus);
+            
             log.info("Updated order {} status to {}", order.getOrderCode(), newStatus);
 
             OrderResponse response = toOrderResponse(order);
@@ -579,18 +678,51 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
+    public ApiResponse markShippingFromReady(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng"));
+
+        // Chỉ cho phép chuyển từ READY_TO_SHIP sang SHIPPING
+        if (order.getStatus() != OrderStatus.READY_TO_SHIP) {
+            return ApiResponse.error("Chỉ có thể chuyển sang đang giao hàng từ trạng thái 'Đã chuẩn bị hàng - Đợi tài xế'");
+        }
+
+        OrderStatus oldStatus = order.getStatus();
+        order.setStatus(OrderStatus.SHIPPING);
+        order.setShippedAt(LocalDateTime.now());
+        orderRepository.save(order);
+
+        // Publish event for accounting module
+        publishOrderStatusChangeEvent(order, oldStatus, OrderStatus.SHIPPING);
+
+        log.info("Sales staff manually marked order {} as SHIPPING (from READY_TO_SHIP)", order.getOrderCode());
+
+        OrderResponse response = toOrderResponse(order);
+        return ApiResponse.success("Đã chuyển đơn hàng sang đang giao hàng", response);
+    }
+
+    @Override
+    @Transactional
     public ApiResponse markAsDelivered(Long orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng"));
 
-        if (order.getStatus() != OrderStatus.SHIPPING) {
-            return ApiResponse.error("Chỉ có thể chuyển sang đã giao từ trạng thái đang giao hàng");
+        // Cho phép chuyển từ READY_TO_SHIP (shipper nội thành đã nhận) hoặc SHIPPING
+        if (order.getStatus() != OrderStatus.SHIPPING && order.getStatus() != OrderStatus.READY_TO_SHIP) {
+            return ApiResponse.error("Chỉ có thể chuyển sang đã giao từ trạng thái đang giao hàng hoặc đã chuẩn bị hàng");
         }
 
+        OrderStatus oldStatus = order.getStatus();
         order.setStatus(OrderStatus.DELIVERED);
         order.setDeliveredAt(LocalDateTime.now());
+        if (order.getShippedAt() == null) {
+            order.setShippedAt(LocalDateTime.now()); // Set shipped time if not set
+        }
         order.setPaymentStatus(PaymentStatus.PAID); // Mark as paid when delivered (COD)
         orderRepository.save(order);
+
+        // Publish event for accounting automation
+        publishOrderStatusChangeEvent(order, oldStatus, OrderStatus.DELIVERED);
 
         log.info("Marked order {} as delivered", order.getOrderCode());
 
@@ -647,19 +779,34 @@ public class OrderServiceImpl implements OrderService {
         }
 
         // Restore stock for cancelled order
+        // Logic khác nhau tùy theo trạng thái:
+        // - PENDING_PAYMENT, CONFIRMED: Hàng đang được giữ (reserved) → Trả lại reserved quantity
+        // - READY_TO_SHIP, SHIPPING: Hàng đã xuất kho → KHÔNG tự động cộng lại kho (cần nhập kho thủ công sau)
+        boolean isExported = (order.getStatus() == OrderStatus.READY_TO_SHIP || 
+                             order.getStatus() == OrderStatus.SHIPPING);
+        
         for (OrderItem item : order.getItems()) {
             Product product = item.getProduct();
-            Long currentStock = product.getStockQuantity();
-            Long restoredStock = currentStock + item.getQuantity();
-            product.setStockQuantity(restoredStock);
             
-            // Update reserved quantity
-            Long currentReserved = product.getReservedQuantity() != null ? product.getReservedQuantity() : 0L;
-            Long newReserved = Math.max(0, currentReserved - item.getQuantity());
-            product.setReservedQuantity(newReserved);
-            
-            log.info("Restored stock for product {}: {} -> {} (returned: {})", 
-                product.getName(), currentStock, restoredStock, item.getQuantity());
+            if (isExported) {
+                // Đơn đã xuất kho → KHÔNG tự động cộng lại kho
+                // Hàng cần được nhập lại kho thủ công sau này
+                log.info("Order {} cancelled after export - product {} needs manual re-import to warehouse", 
+                    order.getOrderCode(), product.getName());
+            } else {
+                // Đơn đang giữ hàng (PENDING_PAYMENT, CONFIRMED) → Chỉ trừ reserved quantity
+                Long currentReserved = product.getReservedQuantity() != null ? product.getReservedQuantity() : 0L;
+                Long newReserved = Math.max(0, currentReserved - item.getQuantity());
+                product.setReservedQuantity(newReserved);
+                
+                // Đồng bộ reserved với InventoryStockz
+                if (product.getWarehouseProduct() != null) {
+                    inventoryService.syncReservedQuantity(product.getWarehouseProduct().getId(), newReserved);
+                }
+                
+                log.info("Released reserved quantity for product {} (reserved order cancelled): {} -> {} (released: {})", 
+                    product.getName(), currentReserved, newReserved, item.getQuantity());
+            }
         }
         
         // Cancel order
@@ -686,7 +833,7 @@ public class OrderServiceImpl implements OrderService {
 
         try {
             // Get GHN order detail
-            com.doan.WEB_TMDT.module.shipping.dto.GHNOrderDetailResponse ghnDetail = 
+            GHNOrderDetailResponse ghnDetail =
                 shippingService.getGHNOrderDetail(order.getGhnOrderCode());
             
             // Update order status from GHN
@@ -710,8 +857,8 @@ public class OrderServiceImpl implements OrderService {
         // For now, return a default or call a helper
         // This is a simplified version - in production, you'd want to cache this
         try {
-            com.doan.WEB_TMDT.module.shipping.dto.CalculateShippingFeeRequest feeRequest = 
-                com.doan.WEB_TMDT.module.shipping.dto.CalculateShippingFeeRequest.builder()
+            CalculateShippingFeeRequest feeRequest =
+                CalculateShippingFeeRequest.builder()
                     .province(province)
                     .district(district)
                     .weight(1000.0)
@@ -729,11 +876,11 @@ public class OrderServiceImpl implements OrderService {
         }
     }
     
-    private List<com.doan.WEB_TMDT.module.shipping.dto.CreateGHNOrderRequest.GHNOrderItem> buildGHNItems(Order order) {
-        List<com.doan.WEB_TMDT.module.shipping.dto.CreateGHNOrderRequest.GHNOrderItem> items = new ArrayList<>();
+    private List<CreateGHNOrderRequest.GHNOrderItem> buildGHNItems(Order order) {
+        List<CreateGHNOrderRequest.GHNOrderItem> items = new ArrayList<>();
         
         for (OrderItem item : order.getItems()) {
-            items.add(com.doan.WEB_TMDT.module.shipping.dto.CreateGHNOrderRequest.GHNOrderItem.builder()
+            items.add(CreateGHNOrderRequest.GHNOrderItem.builder()
                     .name(item.getProductName())
                     .code(item.getProduct().getSku())
                     .quantity(item.getQuantity())
@@ -742,5 +889,29 @@ public class OrderServiceImpl implements OrderService {
         }
         
         return items;
+    }
+    
+    @Override
+    public ApiResponse getOrdersPendingExport() {
+        // Lấy các đơn CONFIRMED mà chưa có trong export_orders
+        List<Order> orders = orderRepository.findByStatusAndNotExported(OrderStatus.CONFIRMED);
+        
+        List<OrderResponse> responses = orders.stream()
+                .map(this::toOrderResponse)
+                .toList();
+        
+        log.info("Found {} orders pending export (CONFIRMED and not exported yet)", orders.size());
+        return ApiResponse.success("Danh sách đơn hàng chờ xuất kho", responses);
+    }
+
+    @Override
+    public ApiResponse getOrdersByCustomerId(Long customerId) {
+        List<Order> orders = orderRepository.findByCustomerIdOrderByCreatedAtDesc(customerId);
+        
+        List<OrderResponse> responses = orders.stream()
+                .map(this::toOrderResponse)
+                .toList();
+        
+        return ApiResponse.success("Danh sách đơn hàng của khách hàng", responses);
     }
 }

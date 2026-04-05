@@ -17,4 +17,5 @@ public class LoginResponse {
     private String role;
     private String position; // WAREHOUSE, PRODUCT_MANAGER, etc.
     private String status;
+    private Long employeeId; // ID của employee (nếu là nhân viên)
 }
