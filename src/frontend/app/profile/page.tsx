@@ -130,7 +130,7 @@ export default function ProfilePage() {
                   <span>Sản phẩm yêu thích</span>
                 </Link>
                 <Link
-                  href="/profile/change-password"
+                  href={`/first-change-password?email=${encodeURIComponent(user.email || '')}`}
                   className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg"
                 >
                   <FiLock size={20} />
