@@ -16,6 +16,28 @@ const priceRanges = [
   { label: 'Trên 20 triệu', min: 20000000, max: Infinity },
 ]
 
+const getProductBrand = (product: any) => {
+  if (typeof product.brand === 'string' && product.brand.trim()) {
+    return product.brand.trim()
+  }
+
+  const specifications = typeof product.specifications === 'string'
+    ? (() => {
+        try {
+          return JSON.parse(product.specifications)
+        } catch {
+          return {}
+        }
+      })()
+    : (product.specifications || {})
+
+  if (typeof specifications.brand === 'string' && specifications.brand.trim()) {
+    return specifications.brand.trim()
+  }
+
+  return ''
+}
+
 export default function ProductsPage() {
   const { t } = useTranslation()
   const searchParams = useSearchParams()
@@ -30,6 +52,7 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true)
 
   const category = searchParams.get('category') || 'all'
+  const searchQuery = searchParams.get('q')?.trim().toLowerCase() || ''
 
   useEffect(() => {
     loadProducts()
@@ -45,7 +68,7 @@ export default function ProductsPage() {
         setProducts(productsData)
         
         // Extract unique brands
-        const uniqueBrands = ['Tất cả', ...new Set(productsData.map((p: any) => p.brand).filter(Boolean))] as string[]
+        const uniqueBrands = ['Tất cả', ...new Set(productsData.map((p: any) => getProductBrand(p)).filter(Boolean))] as string[]
         setBrands(uniqueBrands)
       }
     } catch (error) {
@@ -67,9 +90,25 @@ export default function ProductsPage() {
       )
     }
 
+    if (searchQuery) {
+      filtered = filtered.filter(product => {
+        const name = product.name?.toLowerCase() || ''
+        const description = product.description?.toLowerCase() || ''
+        const brand = getProductBrand(product).toLowerCase()
+        const sku = product.sku?.toLowerCase() || ''
+
+        return (
+          name.includes(searchQuery) ||
+          description.includes(searchQuery) ||
+          brand.includes(searchQuery) ||
+          sku.includes(searchQuery)
+        )
+      })
+    }
+
     // Filter by brand
     if (selectedBrand !== 'Tất cả') {
-      filtered = filtered.filter(product => product.brand === selectedBrand)
+      filtered = filtered.filter(product => getProductBrand(product) === selectedBrand)
     }
 
     // Filter by price range
@@ -99,7 +138,7 @@ export default function ProductsPage() {
     }
 
     setFilteredProducts(filtered)
-  }, [products, category, selectedBrand, selectedPriceRange, sortBy])
+  }, [products, category, searchQuery, selectedBrand, selectedPriceRange, sortBy])
 
   const getCategoryTitle = () => {
     switch (category) {

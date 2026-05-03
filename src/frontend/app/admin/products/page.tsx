@@ -7,6 +7,20 @@ import Image from 'next/image'
 import { FiPlus, FiSearch, FiEdit, FiTrash2, FiEye, FiFilter, FiPackage } from 'react-icons/fi'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '@/store/authStore'
+import { productApi } from '@/lib/api'
+
+type ProductStatus = 'ACTIVE' | 'INACTIVE' | 'OUT_OF_STOCK'
+
+const canManageProducts = (user: ReturnType<typeof useAuthStore.getState>['user']) => {
+  if (!user) {
+    return false
+  }
+
+  return (
+    user.role === 'ADMIN' ||
+    (user.role === 'EMPLOYEE' && (user.position === 'PRODUCT_MANAGER' || user.employee?.position === 'PRODUCT_MANAGER'))
+  )
+}
 
 interface Product {
   id: number
@@ -19,8 +33,45 @@ interface Product {
   category: string
   brand: string
   image: string
-  status: 'ACTIVE' | 'INACTIVE' | 'OUT_OF_STOCK'
+  status: ProductStatus
   createdAt: string
+  categoryId?: number | null
+  description?: string
+  active?: boolean
+}
+
+const FALLBACK_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96"><rect width="96" height="96" fill="#f3f4f6"/><path d="M27 62l12-14 9 10 7-8 14 16H27z" fill="#d1d5db"/><circle cx="37" cy="35" r="6" fill="#d1d5db"/></svg>'
+)}`
+
+const mapApiProductToAdminProduct = (product: any): Product => {
+  const stock = Number(product.stockQuantity ?? 0)
+  const specifications = product.specifications || {}
+  const originalPrice = Number(specifications.originalPrice || 0) || undefined
+  const image = product.images?.[0]?.imageUrl || FALLBACK_IMAGE
+  const active = product.active ?? true
+  const status: ProductStatus = stock === 0 ? 'OUT_OF_STOCK' : active ? 'ACTIVE' : 'INACTIVE'
+  const discount = originalPrice && originalPrice > product.price
+    ? Math.round(((originalPrice - product.price) / originalPrice) * 100)
+    : undefined
+
+  return {
+    id: Number(product.id),
+    name: product.name || 'Chưa có tên',
+    sku: product.sku || 'N/A',
+    price: Number(product.price || 0),
+    originalPrice,
+    discount,
+    stock,
+    category: product.categoryName || 'Chưa phân loại',
+    brand: specifications.brand || 'N/A',
+    image,
+    status,
+    createdAt: product.createdAt || new Date().toISOString(),
+    categoryId: product.categoryId ?? null,
+    description: product.description || '',
+    active,
+  }
 }
 
 export default function AdminProductsPage() {
@@ -34,6 +85,7 @@ export default function AdminProductsPage() {
   const [filterStatus, setFilterStatus] = useState('ALL')
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [productToDelete, setProductToDelete] = useState<Product | null>(null)
+  const [filterCategories, setFilterCategories] = useState<string[]>([])
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -42,8 +94,8 @@ export default function AdminProductsPage() {
       return
     }
 
-    if (user?.role !== 'ADMIN') {
-      toast.error('Chỉ quản trị viên mới có quyền truy cập')
+    if (!canManageProducts(user)) {
+      toast.error('Bạn không có quyền truy cập')
       router.push('/')
       return
     }
@@ -53,55 +105,17 @@ export default function AdminProductsPage() {
 
   const loadProducts = async () => {
     try {
-      // TODO: Call API
-      // const response = await productApi.getAll()
-      // setProducts(response.data)
-      
-      // Mock data
-      setProducts([
-        {
-          id: 1,
-          name: 'iPhone 16 Pro Max 256GB',
-          sku: 'IP16PM-256',
-          price: 29990000,
-          originalPrice: 34990000,
-          discount: 14,
-          stock: 15,
-          category: 'Điện thoại',
-          brand: 'Apple',
-          image: '/images/iphone-16-pro-max.jpg',
-          status: 'ACTIVE',
-          createdAt: '2024-01-15T10:30:00'
-        },
-        {
-          id: 2,
-          name: 'Xiaomi POCO C71 4GB/128GB',
-          sku: 'XM-POCO-C71',
-          price: 2490000,
-          stock: 25,
-          category: 'Điện thoại',
-          brand: 'Xiaomi',
-          image: '/images/xiaomi-poco-c71.jpg',
-          status: 'ACTIVE',
-          createdAt: '2024-01-14T09:20:00'
-        },
-        {
-          id: 3,
-          name: 'MacBook Pro 14 inch M3',
-          sku: 'MBP14-M3',
-          price: 45990000,
-          originalPrice: 49990000,
-          discount: 8,
-          stock: 0,
-          category: 'Laptop',
-          brand: 'Apple',
-          image: '/images/macbook-pro-14.jpg',
-          status: 'OUT_OF_STOCK',
-          createdAt: '2024-01-10T14:15:00'
-        }
-      ])
-    } catch (error) {
-      toast.error('Lỗi khi tải danh sách sản phẩm')
+      const response = await productApi.getAll({ includeInactive: true })
+
+      if (!response.success) {
+        throw new Error(response.error || response.message || 'Lỗi khi tải danh sách sản phẩm')
+      }
+
+      const mappedProducts = (response.data || []).map(mapApiProductToAdminProduct)
+      setProducts(mappedProducts)
+      setFilterCategories(Array.from(new Set(mappedProducts.map((product) => product.category))).sort())
+    } catch (error: any) {
+      toast.error(error.message || 'Lỗi khi tải danh sách sản phẩm')
     } finally {
       setLoading(false)
     }
@@ -111,15 +125,14 @@ export default function AdminProductsPage() {
     if (!productToDelete) return
 
     try {
-      // TODO: Call API
-      // await productApi.delete(productToDelete.id)
+      await productApi.delete(productToDelete.id)
       
       setProducts(products.filter(p => p.id !== productToDelete.id))
       toast.success('Đã xóa sản phẩm')
       setShowDeleteModal(false)
       setProductToDelete(null)
-    } catch (error) {
-      toast.error('Lỗi khi xóa sản phẩm')
+    } catch (error: any) {
+      toast.error(error.message || 'Lỗi khi xóa sản phẩm')
     }
   }
 
@@ -267,9 +280,9 @@ export default function AdminProductsPage() {
               className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
             >
               <option value="ALL">Tất cả danh mục</option>
-              <option value="Điện thoại">Điện thoại</option>
-              <option value="Laptop">Laptop</option>
-              <option value="Tablet">Tablet</option>
+              {filterCategories.map((category) => (
+                <option key={category} value={category}>{category}</option>
+              ))}
             </select>
 
             <select
@@ -418,6 +431,7 @@ export default function AdminProductsPage() {
           </div>
         </div>
       )}
+
     </div>
   )
 }

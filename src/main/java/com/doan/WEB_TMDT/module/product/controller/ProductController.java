@@ -8,6 +8,8 @@ import com.doan.WEB_TMDT.module.product.entity.Product;
 import com.doan.WEB_TMDT.module.product.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -21,14 +23,26 @@ public class ProductController {
     private final ProductSpecificationService productSpecificationService;
 
     @GetMapping
-    public ApiResponse getAll() {
+    public ApiResponse getAll(@RequestParam(defaultValue = "false") boolean includeInactive) {
         List<Product> products = productService.getAll();
-        // Chỉ trả về sản phẩm đang bán (active = true) cho khách hàng
+        boolean canViewInactive = includeInactive && hasBackOfficeProductAccess();
+
         List<ProductWithSpecsDTO> productsWithSpecs = products.stream()
-                .filter(product -> product.getActive() == null || product.getActive()) // null coi như true (sản phẩm cũ)
+                .filter(product -> canViewInactive || product.getActive() == null || product.getActive())
                 .map(productService::toProductWithSpecs)
                 .collect(java.util.stream.Collectors.toList());
         return ApiResponse.success("Danh sách sản phẩm", productsWithSpecs);
+    }
+
+    private boolean hasBackOfficeProductAccess() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getAuthorities() == null) {
+            return false;
+        }
+
+        return authentication.getAuthorities().stream()
+                .map(grantedAuthority -> grantedAuthority.getAuthority())
+                .anyMatch(authority -> "ADMIN".equals(authority) || "PRODUCT_MANAGER".equals(authority));
     }
 
     @GetMapping("/{id}")

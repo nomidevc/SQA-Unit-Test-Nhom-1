@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { FiSearch, FiShoppingCart, FiUser, FiHeart, FiX, FiChevronDown, FiLogOut } from 'react-icons/fi'
 import { useCartStore } from '@/store/cartStore'
 import { useLanguageStore } from '@/store/languageStore'
@@ -14,6 +14,8 @@ import Logo from './Logo'
 
 export default function Header() {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [isLanguageOpen, setIsLanguageOpen] = useState(false)
@@ -72,6 +74,10 @@ export default function Header() {
     return () => window.removeEventListener('cartUpdated', handleCartUpdate)
   }, [isAuthenticated])
 
+  useEffect(() => {
+    setSearchQuery(searchParams.get('q') || '')
+  }, [searchParams])
+
   const handleLogout = () => {
     logout()
     toast.success('Đăng xuất thành công!')
@@ -96,6 +102,28 @@ export default function Header() {
     setIsLanguageOpen(false)
   }
 
+  const handleSearch = () => {
+    const normalizedQuery = searchQuery.trim()
+
+    if (!normalizedQuery) {
+      if (pathname !== '/products') {
+        router.push('/products')
+      }
+      return
+    }
+
+    router.push(`/products?q=${encodeURIComponent(normalizedQuery)}`)
+    setIsMenuOpen(false)
+  }
+
+  const clearSearch = () => {
+    setSearchQuery('')
+
+    if (pathname === '/products' && searchParams.get('q')) {
+      router.push('/products')
+    }
+  }
+
   return (
     <header className="bg-white shadow-sm sticky top-0 z-50">
       <div className="container mx-auto px-4">
@@ -116,14 +144,23 @@ export default function Header() {
                 placeholder={t('searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleSearch()
+                  }
+                }}
                 className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
               />
-              <button className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-navy-500">
+              <button
+                onClick={handleSearch}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-navy-500"
+              >
                 <FiSearch size={20} />
               </button>
               {searchQuery && (
                 <button 
-                  onClick={() => setSearchQuery('')}
+                  onClick={clearSearch}
                   className="absolute right-10 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   <FiX size={16} />

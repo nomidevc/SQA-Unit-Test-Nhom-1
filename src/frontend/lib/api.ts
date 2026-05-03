@@ -2,6 +2,29 @@ import axios from 'axios'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api'
 
+const getStoredAuthToken = () => {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  const directToken = localStorage.getItem('auth_token') || localStorage.getItem('token')
+  if (directToken) {
+    return directToken
+  }
+
+  try {
+    const authStorage = localStorage.getItem('auth-storage')
+    if (!authStorage) {
+      return null
+    }
+
+    const parsedStorage = JSON.parse(authStorage)
+    return parsedStorage?.state?.token || null
+  } catch {
+    return null
+  }
+}
+
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -11,11 +34,9 @@ const apiClient = axios.create({
 
 // Add token to requests if available
 apiClient.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('auth_token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
+  const token = getStoredAuthToken()
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
   }
   return config
 })
@@ -32,8 +53,10 @@ export const authApi = {
   login: async (data: { email: string; password: string }): Promise<ApiResponse<any>> => {
     try {
       const response = await apiClient.post('/auth/login', data)
-      if (response.data.token) {
-        localStorage.setItem('auth_token', response.data.token)
+      const token = response.data?.data?.token || response.data?.token
+      if (token) {
+        localStorage.setItem('auth_token', token)
+        localStorage.setItem('token', token)
       }
       return response.data
     } catch (error: any) {
@@ -62,8 +85,10 @@ export const authApi = {
   verifyOtp: async (data: { email: string; otpCode: string }): Promise<ApiResponse<any>> => {
     try {
       const response = await apiClient.post('/auth/register/verify-otp', data)
-      if (response.data.token) {
-        localStorage.setItem('auth_token', response.data.token)
+      const token = response.data?.data?.token || response.data?.token
+      if (token) {
+        localStorage.setItem('auth_token', token)
+        localStorage.setItem('token', token)
       }
       return response.data
     } catch (error: any) {
@@ -267,6 +292,15 @@ export const productApi = {
     }
   },
 
+  create: async (data: any): Promise<ApiResponse<any>> => {
+    try {
+      const response = await apiClient.post('/products', data)
+      return response.data
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Lỗi khi tạo sản phẩm')
+    }
+  },
+
   getById: async (id: string | number): Promise<ApiResponse<any>> => {
     try {
       const response = await apiClient.get(`/products/${id}`)
@@ -321,6 +355,15 @@ export const productApi = {
       return response.data
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Lỗi khi cập nhật sản phẩm')
+    }
+  },
+
+  delete: async (productId: number): Promise<ApiResponse<any>> => {
+    try {
+      const response = await apiClient.delete(`/products/${productId}`)
+      return response.data
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Lỗi khi xóa sản phẩm')
     }
   },
 
@@ -398,6 +441,37 @@ export const productApi = {
       return response.data
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Lỗi khi thay đổi trạng thái')
+    }
+  },
+}
+
+export const fileApi = {
+  uploadImage: async (file: File): Promise<ApiResponse<string>> => {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    try {
+      const response = await apiClient.post('/files/upload', formData, {
+        headers: {
+          'Content-Type': undefined,
+        },
+      })
+      return response.data
+    } catch (cloudinaryError: any) {
+      try {
+        const response = await apiClient.post('/files/upload-local', formData, {
+          headers: {
+            'Content-Type': undefined,
+          },
+        })
+        return response.data
+      } catch (localError: any) {
+        throw new Error(
+          localError.response?.data?.message ||
+            cloudinaryError.response?.data?.message ||
+            'Lỗi khi upload ảnh'
+        )
+      }
     }
   },
 }

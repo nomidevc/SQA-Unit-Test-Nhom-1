@@ -42,6 +42,10 @@ export default function RegisterPage() {
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (isLoading) {
+      return
+    }
     
     if (formData.password !== formData.confirmPassword) {
       toast.error('Mật khẩu xác nhận không khớp!')
@@ -68,6 +72,8 @@ export default function RegisterPage() {
       if (response.success) {
         toast.success('Mã OTP đã được gửi đến email của bạn!')
         setStep('otp')
+      } else {
+        toast.error(response.message || 'Gửi OTP thất bại!')
       }
     } catch (error: any) {
       toast.error(error.message || 'Gửi OTP thất bại!')
@@ -78,6 +84,11 @@ export default function RegisterPage() {
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (isLoading) {
+      return
+    }
+
     setIsLoading(true)
 
     try {
@@ -85,6 +96,11 @@ export default function RegisterPage() {
         email: formData.email,
         otpCode: otpCode,
       })
+
+      if (!response.success) {
+        toast.error(response.message || 'Xác minh OTP thất bại!')
+        return
+      }
       
       if (response.success && response.data) {
         // Backend trả về User object, cần login lại để lấy token
@@ -132,6 +148,9 @@ export default function RegisterPage() {
             router.push('/login')
           }
         }
+      } else {
+        toast.error('Đăng ký thành công nhưng phản hồi không hợp lệ. Vui lòng đăng nhập thủ công.')
+        router.push('/login')
       }
     } catch (error: any) {
       toast.error(error.message || 'Xác minh OTP thất bại!')
@@ -404,6 +423,7 @@ export default function RegisterPage() {
                 <button
                   type="button"
                   onClick={handleSendOtp}
+                  disabled={isLoading}
                   className="text-red-500 hover:text-red-600 font-medium"
                 >
                   Gửi lại
