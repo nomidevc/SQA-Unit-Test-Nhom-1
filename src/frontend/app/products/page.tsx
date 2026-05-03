@@ -43,12 +43,12 @@ export default function ProductsPage() {
   const searchParams = useSearchParams()
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [sortBy, setSortBy] = useState('default')
-  const [selectedBrand, setSelectedBrand] = useState('Tất cả')
+  const [selectedBrands, setSelectedBrands] = useState<string[]>([])
   const [selectedPriceRange, setSelectedPriceRange] = useState('Tất cả')
   const [showFilters, setShowFilters] = useState(false)
   const [products, setProducts] = useState<any[]>([])
   const [filteredProducts, setFilteredProducts] = useState<any[]>([])
-  const [brands, setBrands] = useState<string[]>(['Tất cả'])
+  const [brands, setBrands] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
   const category = searchParams.get('category') || 'all'
@@ -68,7 +68,7 @@ export default function ProductsPage() {
         setProducts(productsData)
         
         // Extract unique brands
-        const uniqueBrands = ['Tất cả', ...new Set(productsData.map((p: any) => getProductBrand(p)).filter(Boolean))] as string[]
+        const uniqueBrands = [...new Set(productsData.map((p: any) => getProductBrand(p)).filter(Boolean))] as string[]
         setBrands(uniqueBrands)
       }
     } catch (error) {
@@ -107,8 +107,8 @@ export default function ProductsPage() {
     }
 
     // Filter by brand
-    if (selectedBrand !== 'Tất cả') {
-      filtered = filtered.filter(product => getProductBrand(product) === selectedBrand)
+    if (selectedBrands.length > 0) {
+      filtered = filtered.filter(product => selectedBrands.includes(getProductBrand(product)))
     }
 
     // Filter by price range
@@ -138,7 +138,15 @@ export default function ProductsPage() {
     }
 
     setFilteredProducts(filtered)
-  }, [products, category, searchQuery, selectedBrand, selectedPriceRange, sortBy])
+  }, [products, category, searchQuery, selectedBrands, selectedPriceRange, sortBy])
+
+  const toggleBrand = (brand: string) => {
+    setSelectedBrands((currentBrands) => (
+      currentBrands.includes(brand)
+        ? currentBrands.filter((item) => item !== brand)
+        : [...currentBrands, brand]
+    ))
+  }
 
   const getCategoryTitle = () => {
     switch (category) {
@@ -204,14 +212,23 @@ export default function ProductsPage() {
                 <div>
                   <h4 className="font-medium text-gray-900 mb-3">Thương hiệu</h4>
                   <div className="space-y-2">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedBrands.length === 0}
+                        onChange={() => setSelectedBrands([])}
+                        className="mr-2"
+                      />
+                      <span className="text-sm text-gray-700">Tất cả</span>
+                    </label>
                     {brands.map((brand) => (
                       <label key={brand} className="flex items-center">
                         <input
-                          type="radio"
+                          type="checkbox"
                           name="brand"
                           value={brand}
-                          checked={selectedBrand === brand}
-                          onChange={(e) => setSelectedBrand(e.target.value)}
+                          checked={selectedBrands.includes(brand)}
+                          onChange={() => toggleBrand(brand)}
                           className="mr-2"
                         />
                         <span className="text-sm text-gray-700">{brand}</span>
@@ -311,7 +328,7 @@ export default function ProductsPage() {
                 </p>
                 <button
                   onClick={() => {
-                    setSelectedBrand('Tất cả')
+                    setSelectedBrands([])
                     setSelectedPriceRange('Tất cả')
                     setSortBy('default')
                   }}
