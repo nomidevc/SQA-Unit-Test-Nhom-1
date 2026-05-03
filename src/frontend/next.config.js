@@ -3,7 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   images: {
-    domains: ['localhost', 'hoanghamobile.com'],
+    domains: ['localhost', 'hoanghamobile.com', 'res.cloudinary.com'],
   },
   env: {
     API_URL: process.env.API_URL || 'http://localhost:8080/api',

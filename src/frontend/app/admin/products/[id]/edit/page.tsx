@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { FiSave, FiX, FiUpload, FiImage } from 'react-icons/fi'
+import Image from 'next/image'
+import { useParams, useRouter } from 'next/navigation'
+import { FiImage, FiSave, FiUpload, FiX } from 'react-icons/fi'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '@/store/authStore'
 import { categoryApi, fileApi, productApi } from '@/lib/api'
@@ -26,9 +27,11 @@ type CategoryOption = {
   name: string
 }
 
-type PendingImage = {
-  file: File
+type EditableImage = {
+  id?: number
+  file?: File
   previewUrl: string
+  isExisting: boolean
 }
 
 const canManageProducts = (user: ReturnType<typeof useAuthStore.getState>['user']) => {
@@ -42,10 +45,11 @@ const canManageProducts = (user: ReturnType<typeof useAuthStore.getState>['user'
   )
 }
 
-export default function CreateProductPage() {
+export default function EditProductPage() {
+  const params = useParams<{ id: string }>()
   const router = useRouter()
   const { user, isAuthenticated } = useAuthStore()
-  
+
   const [formData, setFormData] = useState<ProductFormState>({
     name: '',
     sku: '',
@@ -62,15 +66,16 @@ export default function CreateProductPage() {
       ram: '',
       storage: '',
       battery: '',
-      camera: ''
-    }
+      camera: '',
+    },
   })
-  
   const [categories, setCategories] = useState<CategoryOption[]>([])
-  const [images, setImages] = useState<PendingImage[]>([])
+  const [images, setImages] = useState<EditableImage[]>([])
+  const [existingImageIds, setExistingImageIds] = useState<number[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [isLoadingCategories, setIsLoadingCategories] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const imagePreviewsRef = useRef<PendingImage[]>([])
+  const imagePreviewsRef = useRef<EditableImage[]>([])
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -82,47 +87,8 @@ export default function CreateProductPage() {
     if (!canManageProducts(user)) {
       toast.error('Bạn không có quyền truy cập chức năng này')
       router.push('/')
-      return
     }
-  }, [isAuthenticated, user, router])
-
-  useEffect(() => {
-    if (!isAuthenticated || !canManageProducts(user)) {
-      return
-    }
-
-    let isMounted = true
-
-    const loadCategories = async () => {
-      setIsLoadingCategories(true)
-
-      try {
-        const response = await categoryApi.getAll()
-
-        if (!response.success) {
-          throw new Error(response.error || 'Không thể tải danh mục')
-        }
-
-        if (isMounted) {
-          setCategories(response.data || [])
-        }
-      } catch (error: any) {
-        if (isMounted) {
-          toast.error(error.message || 'Không thể tải danh mục')
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoadingCategories(false)
-        }
-      }
-    }
-
-    loadCategories()
-
-    return () => {
-      isMounted = false
-    }
-  }, [isAuthenticated, user])
+  }, [isAuthenticated, router, user])
 
   useEffect(() => {
     imagePreviewsRef.current = images
@@ -131,61 +97,151 @@ export default function CreateProductPage() {
   useEffect(() => {
     return () => {
       imagePreviewsRef.current.forEach((image) => {
-        URL.revokeObjectURL(image.previewUrl)
+        if (!image.isExisting) {
+          URL.revokeObjectURL(image.previewUrl)
+        }
       })
     }
   }, [])
 
+  useEffect(() => {
+    if (!isAuthenticated || !canManageProducts(user) || !params?.id) {
+      return
+    }
+
+    let isMounted = true
+
+    const loadData = async () => {
+      setIsLoading(true)
+      setIsLoadingCategories(true)
+
+      try {
+        const [categoriesResponse, productResponse] = await Promise.all([
+          categoryApi.getAll(),
+          productApi.getById(params.id),
+        ])
+
+        if (!categoriesResponse.success) {
+          throw new Error(categoriesResponse.error || 'Không thể tải danh mục')
+        }
+
+        if (!productResponse.success || !productResponse.data) {
+          throw new Error(productResponse.error || productResponse.message || 'Không thể tải sản phẩm')
+        }
+
+        if (!isMounted) {
+          return
+        }
+
+        const product = productResponse.data
+        const specifications = product.specifications || {}
+        const currentImages: EditableImage[] = (product.images || []).map((image: any) => ({
+          id: image.id,
+          previewUrl: image.imageUrl,
+          isExisting: true,
+        }))
+
+        setCategories(categoriesResponse.data || [])
+        setExistingImageIds(currentImages.map((image) => image.id).filter(Boolean) as number[])
+        setImages(currentImages)
+        setFormData({
+          name: product.name || '',
+          sku: product.sku || '',
+          description: product.description || '',
+          price: product.price != null ? String(product.price) : '',
+          originalPrice: specifications.originalPrice || '',
+          category: product.categoryId != null ? String(product.categoryId) : '',
+          brand: specifications.brand || '',
+          stock: product.stockQuantity != null ? String(product.stockQuantity) : '',
+          status: product.active === false ? 'INACTIVE' : 'ACTIVE',
+          specifications: {
+            screen: specifications.screen || '',
+            cpu: specifications.cpu || '',
+            ram: specifications.ram || '',
+            storage: specifications.storage || '',
+            battery: specifications.battery || '',
+            camera: specifications.camera || '',
+          },
+        })
+      } catch (error: any) {
+        if (isMounted) {
+          toast.error(error.message || 'Không thể tải thông tin sản phẩm')
+          router.push('/admin/products')
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+          setIsLoadingCategories(false)
+        }
+      }
+    }
+
+    loadData()
+
+    return () => {
+      isMounted = false
+    }
+  }, [isAuthenticated, params, router, user])
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }))
   }
 
   const handleSpecChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       specifications: {
         ...prev.specifications,
-        [name]: value
-      }
+        [name]: value,
+      },
     }))
   }
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
-    if (!files) return
+    if (!files) {
+      return
+    }
 
-    const newImages = Array.from(files).map(file => ({
+    const newImages = Array.from(files).map((file) => ({
       file,
-      previewUrl: URL.createObjectURL(file)
+      previewUrl: URL.createObjectURL(file),
+      isExisting: false,
     }))
-    setImages(prev => [...prev, ...newImages])
+
+    setImages((prev) => [...prev, ...newImages])
     e.target.value = ''
   }
 
   const removeImage = (index: number) => {
-    setImages(prev => {
+    setImages((prev) => {
       const imageToRemove = prev[index]
-      if (imageToRemove) {
+      if (imageToRemove && !imageToRemove.isExisting) {
         URL.revokeObjectURL(imageToRemove.previewUrl)
       }
-      return prev.filter((_, i) => i !== index)
+      return prev.filter((_, imageIndex) => imageIndex !== index)
     })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (!params?.id) {
+      toast.error('Thiếu mã sản phẩm')
+      return
+    }
+
     if (!formData.name || !formData.sku || !formData.price || !formData.category || !formData.stock) {
       toast.error('Vui lòng điền đầy đủ thông tin bắt buộc')
       return
     }
 
-    const selectedCategory = categories.find(category => String(category.id) === formData.category)
+    const selectedCategory = categories.find((category) => String(category.id) === formData.category)
     if (!selectedCategory) {
       toast.error('Danh mục không hợp lệ')
       return
@@ -202,13 +258,12 @@ export default function CreateProductPage() {
         }).filter(([, value]) => value && value.trim() !== '')
       )
 
-      const productResponse = await productApi.create({
+      const updateResponse = await productApi.update(Number(params.id), {
         name: formData.name.trim(),
         sku: formData.sku.trim(),
         description: formData.description.trim() || null,
         price: Number(formData.price),
         stockQuantity: Number(formData.stock),
-        reservedQuantity: 0,
         active: formData.status === 'ACTIVE',
         category: {
           id: selectedCategory.id,
@@ -216,24 +271,33 @@ export default function CreateProductPage() {
         techSpecsJson: JSON.stringify(specifications),
       })
 
-      if (!productResponse.success || !productResponse.data?.id) {
-        throw new Error(productResponse.message || productResponse.error || 'Tạo sản phẩm thất bại')
+      if (!updateResponse.success) {
+        throw new Error(updateResponse.message || updateResponse.error || 'Cập nhật sản phẩm thất bại')
       }
 
-      const createdProductId = productResponse.data.id
+      const keptExistingIds = new Set(
+        images.filter((image) => image.isExisting && image.id != null).map((image) => image.id as number)
+      )
 
-      for (let index = 0; index < images.length; index += 1) {
-        const image = images[index]
-        const uploadResponse = await fileApi.uploadImage(image.file)
+      const imageIdsToDelete = existingImageIds.filter((imageId) => !keptExistingIds.has(imageId))
+      for (const imageId of imageIdsToDelete) {
+        await productApi.deleteProductImage(imageId)
+      }
 
+      const existingImagesCount = images.filter((image) => image.isExisting).length
+      const newImages = images.filter((image) => !image.isExisting && image.file)
+
+      for (let index = 0; index < newImages.length; index += 1) {
+        const image = newImages[index]
+        const uploadResponse = await fileApi.uploadImage(image.file as File)
         if (!uploadResponse.success || !uploadResponse.data) {
           throw new Error(uploadResponse.message || uploadResponse.error || 'Upload ảnh thất bại')
         }
 
-        await productApi.addProductImage(createdProductId, uploadResponse.data, index === 0)
+        await productApi.addProductImage(Number(params.id), uploadResponse.data, existingImagesCount === 0 && index === 0)
       }
 
-      toast.success('Thêm sản phẩm thành công!')
+      toast.success('Cập nhật sản phẩm thành công!')
       router.push('/admin/products')
     } catch (error: any) {
       toast.error(error.message || 'Có lỗi xảy ra')
@@ -242,10 +306,20 @@ export default function CreateProductPage() {
     }
   }
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Đang tải thông tin sản phẩm...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8">
-        {/* Breadcrumb */}
         <nav className="flex items-center space-x-2 text-sm text-gray-600 mb-6">
           <Link href="/" className="hover:text-red-500">Trang chủ</Link>
           <span>/</span>
@@ -253,30 +327,25 @@ export default function CreateProductPage() {
           <span>/</span>
           <Link href="/admin/products" className="hover:text-red-500">Quản lý sản phẩm</Link>
           <span>/</span>
-          <span className="text-gray-900">Thêm sản phẩm</span>
+          <span className="text-gray-900">Chỉnh sửa sản phẩm</span>
         </nav>
 
-        {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Thêm sản phẩm mới</h1>
-            <p className="text-gray-600 mt-1">Nhập thông tin sản phẩm mới</p>
+            <h1 className="text-3xl font-bold text-gray-900">Chỉnh sửa sản phẩm</h1>
+            <p className="text-gray-600 mt-1">Cập nhật đầy đủ thông tin sản phẩm</p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Main Form */}
             <div className="lg:col-span-2 space-y-6">
-              {/* Basic Info */}
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <h2 className="text-xl font-bold text-gray-900 mb-4">Thông tin cơ bản</h2>
-                
+
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Tên sản phẩm *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Tên sản phẩm *</label>
                     <input
                       type="text"
                       name="name"
@@ -290,9 +359,7 @@ export default function CreateProductPage() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        SKU *
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">SKU *</label>
                       <input
                         type="text"
                         name="sku"
@@ -305,9 +372,7 @@ export default function CreateProductPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Thương hiệu
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Thương hiệu</label>
                       <input
                         type="text"
                         name="brand"
@@ -320,9 +385,7 @@ export default function CreateProductPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Mô tả
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Mô tả</label>
                     <textarea
                       name="description"
                       value={formData.description}
@@ -335,15 +398,12 @@ export default function CreateProductPage() {
                 </div>
               </div>
 
-              {/* Pricing */}
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <h2 className="text-xl font-bold text-gray-900 mb-4">Giá & Kho</h2>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Giá bán *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Giá bán *</label>
                     <input
                       type="number"
                       name="price"
@@ -357,9 +417,7 @@ export default function CreateProductPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Giá gốc
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Giá gốc</label>
                     <input
                       type="number"
                       name="originalPrice"
@@ -372,9 +430,7 @@ export default function CreateProductPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Số lượng tồn kho *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Số lượng tồn kho *</label>
                     <input
                       type="number"
                       name="stock"
@@ -389,15 +445,12 @@ export default function CreateProductPage() {
                 </div>
               </div>
 
-              {/* Specifications */}
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <h2 className="text-xl font-bold text-gray-900 mb-4">Thông số kỹ thuật</h2>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Màn hình
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Màn hình</label>
                     <input
                       type="text"
                       name="screen"
@@ -409,9 +462,7 @@ export default function CreateProductPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      CPU
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">CPU</label>
                     <input
                       type="text"
                       name="cpu"
@@ -423,9 +474,7 @@ export default function CreateProductPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      RAM
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">RAM</label>
                     <input
                       type="text"
                       name="ram"
@@ -437,9 +486,7 @@ export default function CreateProductPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Bộ nhớ
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Bộ nhớ</label>
                     <input
                       type="text"
                       name="storage"
@@ -451,9 +498,7 @@ export default function CreateProductPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Pin
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Pin</label>
                     <input
                       type="text"
                       name="battery"
@@ -465,9 +510,7 @@ export default function CreateProductPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Camera
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Camera</label>
                     <input
                       type="text"
                       name="camera"
@@ -480,10 +523,9 @@ export default function CreateProductPage() {
                 </div>
               </div>
 
-              {/* Images */}
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <h2 className="text-xl font-bold text-gray-900 mb-4">Hình ảnh</h2>
-                
+
                 <div className="space-y-4">
                   <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
                     <FiImage size={48} className="mx-auto text-gray-400 mb-4" />
@@ -504,10 +546,13 @@ export default function CreateProductPage() {
                   {images.length > 0 && (
                     <div className="grid grid-cols-4 gap-4">
                       {images.map((image, index) => (
-                        <div key={index} className="relative group">
-                          <img
+                        <div key={`${image.id || 'new'}-${index}`} className="relative group">
+                          <Image
                             src={image.previewUrl}
                             alt={`Product ${index + 1}`}
+                            width={320}
+                            height={128}
+                            unoptimized={!image.isExisting}
                             className="w-full h-32 object-cover rounded-lg"
                           />
                           <button
@@ -525,17 +570,14 @@ export default function CreateProductPage() {
               </div>
             </div>
 
-            {/* Sidebar */}
             <div className="lg:col-span-1">
               <div className="bg-white rounded-lg shadow-sm p-6 sticky top-24 space-y-6">
                 <div>
                   <h2 className="text-xl font-bold text-gray-900 mb-4">Cài đặt</h2>
-                  
+
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Danh mục *
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Danh mục *</label>
                       <select
                         name="category"
                         value={formData.category}
@@ -546,17 +588,13 @@ export default function CreateProductPage() {
                       >
                         <option value="">Chọn danh mục</option>
                         {categories.map((category) => (
-                          <option key={category.id} value={String(category.id)}>
-                            {category.name}
-                          </option>
+                          <option key={category.id} value={String(category.id)}>{category.name}</option>
                         ))}
                       </select>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Trạng thái
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Trạng thái</label>
                       <select
                         name="status"
                         value={formData.status}
@@ -578,7 +616,7 @@ export default function CreateProductPage() {
                       className="w-full flex items-center justify-center space-x-2 bg-red-500 text-white py-3 px-6 rounded-lg font-semibold hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <FiSave />
-                      <span>{isSubmitting ? 'Đang lưu...' : 'Lưu sản phẩm'}</span>
+                      <span>{isSubmitting ? 'Đang lưu...' : 'Cập nhật sản phẩm'}</span>
                     </button>
 
                     <Link

@@ -81,6 +81,9 @@ public class ProductServiceImpl implements ProductService {
                     if (product.getTechSpecsJson() != null) {
                         existingProduct.setTechSpecsJson(product.getTechSpecsJson());
                     }
+                    if (product.getActive() != null) {
+                        existingProduct.setActive(product.getActive());
+                    }
                     // Không update images collection - quản lý riêng qua addProductImage/deleteProductImage
                     return productRepository.save(existingProduct);
                 })
@@ -133,6 +136,7 @@ public class ProductServiceImpl implements ProductService {
                     .sku(product.getSku())
                     .price(product.getPrice())
                     .description(product.getDescription())
+                    .active(product.getActive())
                     .stockQuantity(product.getStockQuantity())
                     .reservedQuantity(product.getReservedQuantity())
                     .availableQuantity(availableQty.intValue()) // Số lượng thực sự có thể bán
@@ -165,6 +169,7 @@ public class ProductServiceImpl implements ProductService {
                     .id(product.getId())
                     .name(product.getName())
                     .price(product.getPrice())
+                    .active(product.getActive())
                     .build();
         }
     }

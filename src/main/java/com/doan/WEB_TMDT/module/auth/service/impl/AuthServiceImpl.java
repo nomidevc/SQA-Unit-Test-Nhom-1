@@ -123,6 +123,10 @@ public class AuthServiceImpl implements AuthService {
                 otpRecord.getAddress()
         );
 
+        if (!response.isSuccess()) {
+            return response;
+        }
+
         return ApiResponse.success("Xác minh OTP thành công, tài khoản đã được tạo!", response.getData());
     }
 }

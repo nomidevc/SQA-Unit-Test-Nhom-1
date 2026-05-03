@@ -2,19 +2,16 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { FiShoppingCart, FiHeart, FiStar, FiSearch, FiMenu } from 'react-icons/fi'
+import { FiHeart, FiStar } from 'react-icons/fi'
 import { productApi, categoryApi } from '@/lib/api'
-import toast from 'react-hot-toast'
-import { useAuthStore } from '@/store/authStore'
 
 export default function HomePage() {
-  const { user } = useAuthStore()
   const [products, setProducts] = useState<any[]>([])
   const [categories, setCategories] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('')
-  const [showMobileMenu, setShowMobileMenu] = useState(false)
+  const [sortBy, setSortBy] = useState('newest')
 
   useEffect(() => {
     loadData()
@@ -48,11 +45,40 @@ export default function HomePage() {
     }).format(price)
   }
 
-  const filteredProducts = products.filter(product => {
-    const matchSearch = product.name?.toLowerCase().includes(searchQuery.toLowerCase())
+  const getBestSellerScore = (product: any) => {
+    return Number(
+      product.soldQuantity ??
+      product.salesCount ??
+      product.orderCount ??
+      product.totalSold ??
+      product.sold ??
+      0
+    )
+  }
+
+  const filteredProducts = [...products].filter(product => {
+    const normalizedQuery = searchQuery.trim().toLowerCase()
+    const matchSearch = !normalizedQuery || product.name?.toLowerCase().includes(normalizedQuery)
     const matchCategory = !selectedCategory || product.categoryId?.toString() === selectedCategory
     return matchSearch && matchCategory
   })
+
+  switch (sortBy) {
+    case 'price-asc':
+      filteredProducts.sort((a, b) => (a.price || 0) - (b.price || 0))
+      break
+    case 'price-desc':
+      filteredProducts.sort((a, b) => (b.price || 0) - (a.price || 0))
+      break
+    case 'best-selling':
+      filteredProducts.sort((a, b) => getBestSellerScore(b) - getBestSellerScore(a))
+      break
+    case 'newest':
+      filteredProducts.sort((a, b) => (b.id || 0) - (a.id || 0))
+      break
+    default:
+      break
+  }
 
   if (loading) {
     return (
@@ -133,11 +159,15 @@ export default function HomePage() {
                   ? categories.find(c => c.id.toString() === selectedCategory)?.name || 'Sản phẩm'
                   : 'Tất cả sản phẩm'}
               </h1>
-              <select className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
-                <option>Mới nhất</option>
-                <option>Giá tăng dần</option>
-                <option>Giá giảm dần</option>
-                <option>Bán chạy</option>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+              >
+                <option value="newest">Mới nhất</option>
+                <option value="price-asc">Giá tăng dần</option>
+                <option value="price-desc">Giá giảm dần</option>
+                <option value="best-selling">Bán chạy</option>
               </select>
             </div>
 
